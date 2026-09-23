@@ -1,0 +1,14 @@
+{
+  "name": "amoniac",
+  "owner": {
+    "name": "Amoniac",
+    "url": "https://github.com/amoniacou"
+  },
+  "plugins": [
+    {
+      "name": "agent-skills",
+      "source": "./",
+      "description": "Skills (brainstorm, plan, helmcheck) and guard hooks (no comments, no git writes, no shell file writes)"
+    }
+  ]
+}

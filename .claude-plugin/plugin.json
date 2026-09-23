@@ -1,0 +1,11 @@
+{
+  "name": "agent-skills",
+  "version": "0.1.0",
+  "description": "Skills (brainstorm, plan, helmcheck) and guard hooks (no comments, no git writes, no shell file writes)",
+  "author": {
+    "name": "Amoniac",
+    "url": "https://github.com/amoniacou"
+  },
+  "repository": "https://github.com/amoniacou/agent-skills",
+  "license": "MIT"
+}
