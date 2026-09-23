@@ -4,7 +4,7 @@ Claude Code plugin with personal skills and guard hooks.
 
 ## Skills
 
-- `brainstorm` — turn an idea into a design through one-at-a-time questions
+- `brainstorm` — turn an idea into a design through one-at-a-time questions (for now a copy of [parMaster/claude-dlc brainstorm](https://github.com/parMaster/claude-dlc/tree/main/plugins/brainstorm), MIT)
 - `plan` — numbered plan, list of files, stop before implementing
 - `helmcheck` — validate Helm charts with `helm template`, report all errors at once
 
