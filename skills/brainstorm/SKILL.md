@@ -84,6 +84,9 @@ After design is validated, use AskUserQuestion tool:
 - **One question at a time** - do not overwhelm with multiple questions
 - **Multiple choice preferred** - easier to answer than open-ended when possible
 - **YAGNI ruthlessly** - remove unnecessary features from all designs, keep scope minimal
+- **KISS** - prefer the simplest design that meets the requirements. Add abstractions, components, or indirection only when they solve a concrete problem.
+- **Plain language** - use familiar words and concrete explanations. Explain what changes and why; use technical terms when they make the explanation more precise.
+- **No padding** - give each point once. Do not repeat it in an introduction, explanation, and summary, or add obvious details and artificial alternatives to fill space. Treat section lengths as guidance, not quotas: stop when the point is clear. Keep detail that helps the user decide.
 - **Explore alternatives** - always propose 2-3 approaches before settling
 - **Incremental validation** - present design in sections, validate each
 - **Be flexible** - go back and clarify when something doesn't make sense
