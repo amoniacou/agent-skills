@@ -31,6 +31,11 @@ INPLACE = [
     (re.compile(r"(?:^|[|&;(\s])(?:yq|jq|crudini)(?:\s+-\S*)*\s+(?:-i\b|--in-?place\b)"), "yq/jq -i"),
 ]
 
+FILE_OPS = re.compile(
+    r"(?:^|&&|\|\||[;|(\n])\s*(?:sudo(?:\s+-\S+)*\s+|xargs\b[^|;&\n]*?\s)?"
+    r"(mv|cp|rm|rmdir|mkdir|touch|ln|install|rsync|unlink)(?:\s|$)"
+)
+
 INTERPRETER = re.compile(r"(?:^|[|&;(\s])(?:python3?|ruby|node|php)(?:\s|$)")
 INTERPRETER_INPUT = re.compile(r"<<|\s-c(?:\s|$)|\s-e(?:\s|$)")
 INTERPRETER_WRITE = re.compile(
@@ -81,6 +86,10 @@ def check_command(command, root):
     for pattern, name in INPLACE:
         if pattern.search(cleaned):
             deny("Заблоковано: %s редагує файл на місці. %s" % (name, RULE))
+
+    found = FILE_OPS.search(cleaned)
+    if found:
+        deny("Заблоковано: %s змінює файли. Попроси користувача виконати це самостійно через ! у промпті." % found.group(1))
 
     if INTERPRETER.search(cleaned) and INTERPRETER_INPUT.search(cleaned) and INTERPRETER_WRITE.search(cleaned):
         deny("Заблоковано: однорядковий скрипт або heredoc, що пише файл. %s" % RULE)
