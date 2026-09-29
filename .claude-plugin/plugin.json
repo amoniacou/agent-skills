@@ -1,6 +1,6 @@
 {
   "name": "agent-skills",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Skills (brainstorm, plan, helmcheck) and guard hooks (no comments, no git writes, no shell file writes)",
   "author": {
     "name": "Amoniac",
