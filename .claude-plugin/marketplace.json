@@ -8,7 +8,7 @@
     {
       "name": "agent-skills",
       "source": "./",
-      "description": "Skills (brainstorm, plan, helmcheck) and guard hooks (no comments, no git writes, no shell file writes)"
+      "description": "Skills (brainstorm, plan, helmcheck, principles, naming, testing) and guard hooks (no comments, no git writes, no shell file writes)"
     }
   ]
 }
