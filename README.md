@@ -23,13 +23,13 @@ Claude Code plugin with personal skills and guard hooks.
 
 ```
 /plugin marketplace add amoniacou/agent-skills
-/plugin install amoniac@agent-skills
+/plugin install amoniac@skills
 ```
 
 Update on other machines:
 
 ```
-/plugin marketplace update agent-skills
+/plugin marketplace update skills
 ```
 
 ## Test
