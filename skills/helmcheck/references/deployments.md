@@ -162,7 +162,7 @@ spec:
     tier: app
   ports:
     - name: http
-      port: 80
+      port: {{ required "app.port is required" .Values.app.port }}
       targetPort: http
 ```
 
@@ -173,4 +173,4 @@ spec:
 - For a worker, keep the Deployment structure and working probes. Omit the Service unless another workload calls it.
 - If autoscaling is enabled, supply an HPA targeting this Deployment. See [worker HPA and PDB](availability.md).
 - For repeated Rails containers, replace only the container block with the [shared helper](shared-containers.md). Keep the Deployment structure here.
-- Check that every Deployment and Service selector matches the pod labels, every probe port resolves, and every mount has a volume.
+- Check that every Deployment and Service selector matches the pod labels, every Service port equals its container port, every probe port resolves, and every mount has a volume.

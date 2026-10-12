@@ -91,7 +91,7 @@ backend:
   service:
     name: {{ include "common.names.fullname" . }}-{{ ternary "maintenance" "frontend" .Values.maintenance }}
     port:
-      number: 80
+      number: 8080
 ```
 
 - Replace `frontend` with that path's normal backend. Apply the switch to every public app host and path, including API and auth routes.
@@ -111,5 +111,5 @@ server {
 }
 ```
 
-- Map Service port 80 to container port 8080. Use `/healthz` on 8080 for probes.
+- Expose the maintenance Service on port 8080, the same as the container. Use `/healthz` on 8080 for probes.
 - Check that public requests return 503, the maintenance pod stays ready, and disabling maintenance restores each original backend.

@@ -17,6 +17,8 @@ when_to_use: Before editing Chart.yaml, values*.yaml, environment values, chart 
 
 ## Templates and values
 
+- A repo that holds only the chart keeps it at the repo root.
+- When adding a chart to a service's code repo, put it in `helm/`: `helm/Chart.yaml`, `helm/values.yaml`, `helm/templates/`. Do not write chart files into the service's root. Use the repo's existing chart directory if it has one.
 - Make the application meet the chart's requirements. Do not weaken runtime rules for developer convenience.
 - Group manifests by service. Keep resource structure visible in templates.
 - Use application charts for deployable resources and library charts for reusable named templates.
@@ -37,6 +39,7 @@ when_to_use: Before editing Chart.yaml, values*.yaml, environment values, chart 
 - Set an explicit non-root user and group. Disable privilege escalation and drop all capabilities.
 - Use a read-only root filesystem. Mount writable paths on volumes with suitable ownership. Bound temporary storage.
 - Give long-running containers readiness and liveness probes, including workers. Require the app's actual health paths and ports.
+- Set each Service `port` to the container port from the same value. Do not remap to 80. Point ingress backends at that port.
 - Check startup dependencies with bounded init-container checks, such as `common.network.hostcheck`. Use stable names and fail on timeout.
 - Store secret names and key references in values, not secret contents. Mount only needed secret files, read-only, with restricted permissions.
 - Put non-secret settings in ConfigMaps. Share env helpers between an app and its Jobs. Avoid accidental overrides between `envFrom` and `env`.
