@@ -43,6 +43,8 @@ CASES = [
     (ALLOW, "awk '{if ($1 >= 2) print}' file"),
     (ALLOW, "gh pr list --json number --jq '.[]|select(.number>=3)'"),
     (ALLOW, "grep -rn 'a=>b' src/"),
+    (ALLOW, "gofmt -r 'a.Spec.Target.Channel -> &a.Spec.Channel' -w api internal tests"),
+    (ALLOW, "gofmt -l ./internal"),
 ]
 
 

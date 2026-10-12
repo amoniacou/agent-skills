@@ -18,6 +18,7 @@ Signs of going too far:
 - an interface with one implementation that is never swapped
 - a strategy, factory or registry with one entry
 - config options nobody sets
+- a one-line wrapper with fewer than three callers
 
 ## 2. Prefer deletion
 
@@ -36,6 +37,8 @@ Only remove duplication that is the same rule. When that rule changes, every cop
 Code that looks alike but stands for different ideas is not duplication. Leave it alone, because the copies will drift apart.
 
 Wait for the third copy before extracting. One is a fact, two may be chance, three is a pattern. If unsure, inline first and see whether the duplication matters.
+
+The same rule holds for a one-line function or method that only reads a field or calls one other thing. Keep it only when it is called from at least three places, or when it hides a decision such as a nil check or a fallback. Otherwise write the expression where it is used. When a change removes that decision, inline the wrapper at every call site and delete it.
 
 A copied module is duplication from the first copy. Do not copy a whole file or package to make a new version or support a new backend: every bug then has to be fixed twice. Pull out the shared part right away, or change the original.
 

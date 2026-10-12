@@ -6,10 +6,11 @@ Claude Code plugin with personal skills and guard hooks.
 
 - `brainstorm` — turn an idea into a design through one-at-a-time questions (for now a copy of [parMaster/claude-dlc brainstorm](https://github.com/parMaster/claude-dlc/tree/main/plugins/brainstorm), MIT)
 - `plan` — numbered plan, list of files, stop before implementing
-- `helmcheck` — validate Helm charts with `helm template`, report all errors at once
+- `helmcheck` — Helm chart rules: workload baseline, values, secrets, migrations and hooks, availability, releases, validation with kubeconform and conftest
 - `principles` — KISS/YAGNI, prefer deletion, DRY by the rule of three, fail loudly, test against real dependencies
 - `naming` — how to name files, classes, errors, methods and internal methods
 - `testing` — test levels, real dependencies, when mocks are allowed, isolation, no sleep, structure
+- `go-best-practices` — best practices for writing Go code
 
 ## Hooks (PreToolUse)
 
@@ -22,13 +23,13 @@ Claude Code plugin with personal skills and guard hooks.
 
 ```
 /plugin marketplace add amoniacou/agent-skills
-/plugin install agent-skills@amoniac
+/plugin install amoniac@agent-skills
 ```
 
 Update on other machines:
 
 ```
-/plugin marketplace update amoniac
+/plugin marketplace update agent-skills
 ```
 
 ## Test

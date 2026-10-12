@@ -6,9 +6,9 @@ import tempfile
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "remind-skills.py")
 ROOT = "/home/user/project"
 
-NAMING = "agent-skills:naming"
-PRINCIPLES = "agent-skills:principles"
-TESTING = "agent-skills:testing"
+NAMING = "amoniac:naming"
+PRINCIPLES = "amoniac:principles"
+TESTING = "amoniac:testing"
 
 EXISTING_RUBY = "class Consumer\n  def run\n  end\nend\n"
 

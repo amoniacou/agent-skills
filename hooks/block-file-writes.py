@@ -5,10 +5,11 @@ import re
 import sys
 
 RULE = (
-    "Файли проєкту редагуються тільки через Edit або Write — користувач переглядає диф перед "
-    "застосуванням, а через shell правка проходить непоміченою і залишає гарнес зі застарілим "
-    "станом файлу. Один Edit на кожен фрагмент (або replace_all). Якщо зміна справді механічна на "
-    "сотні місць — скажи про це і спитай користувача. Тимчасові файли пиши у scratchpad (/tmp/)."
+    "Project files are edited only through Edit or Write: the user reviews the diff before it "
+    "lands, while a shell edit slips past unseen and leaves the harness with a stale view of the "
+    "file. One Edit per hunk (or replace_all). A mechanical rewrite of Go expressions goes through "
+    "gofmt -r, which this hook allows. If a change is otherwise mechanical across hundreds of "
+    "sites, say so and ask the user. Write temporary files to the scratchpad (/tmp/)."
 )
 
 SAFE_REDIRECT = re.compile(r"(?:\d*>&\d+|&>>?\s*/dev/null|\d*>>?\s*/dev/(?:null|stdout|stderr)\b)")
@@ -85,26 +86,26 @@ def check_command(command, root):
 
     for pattern, name in INPLACE:
         if pattern.search(cleaned):
-            deny("Заблоковано: %s редагує файл на місці. %s" % (name, RULE))
+            deny("Blocked: %s edits the file in place. %s" % (name, RULE))
 
     found = FILE_OPS.search(cleaned)
     if found:
-        deny("Заблоковано: %s змінює файли. Попроси користувача виконати це самостійно через ! у промпті." % found.group(1))
+        deny("Blocked: %s changes files. Ask the user to run it themselves with ! in the prompt." % found.group(1))
 
     if INTERPRETER.search(cleaned) and INTERPRETER_INPUT.search(cleaned) and INTERPRETER_WRITE.search(cleaned):
-        deny("Заблоковано: однорядковий скрипт або heredoc, що пише файл. %s" % RULE)
+        deny("Blocked: a one-liner or heredoc that writes a file. %s" % RULE)
 
     for launcher, out in FETCH_OUT:
         if launcher.search(cleaned):
             found = out.search(cleaned)
             if found and not target_allowed(found.group(1), root):
-                deny("Заблоковано: завантаження у файл %s. %s" % (found.group(1), RULE))
+                deny("Blocked: a download into the file %s. %s" % (found.group(1), RULE))
 
-    for pattern, kind in ((REDIRECT, "перенаправлення"), (TEE, "tee")):
+    for pattern, kind in ((REDIRECT, "a redirect"), (TEE, "tee")):
         for match in pattern.finditer(cleaned):
             target = next(g for g in match.groups() if g is not None)
             if not target_allowed(target, root):
-                deny("Заблоковано: %s у файл %s. %s" % (kind, target, RULE))
+                deny("Blocked: %s into the file %s. %s" % (kind, target, RULE))
 
 
 def main():

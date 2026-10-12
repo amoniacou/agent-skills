@@ -31,9 +31,9 @@ TEST_DOUBLE = re.compile(
     r"(\bsleep\b|time\.Sleep|\ballow\(|\bdouble\(|instance_double|\bstub|\bmock|\bMock|httpmock|gomock|sqlmock|\bSkip\()"
 )
 
-NAMING = "agent-skills:naming"
-PRINCIPLES = "agent-skills:principles"
-TESTING = "agent-skills:testing"
+NAMING = "amoniac:naming"
+PRINCIPLES = "amoniac:principles"
+TESTING = "amoniac:testing"
 
 
 def matching(pattern, text):
