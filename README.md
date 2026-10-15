@@ -11,6 +11,7 @@ Claude Code plugin with personal skills and guard hooks.
 - `naming` — how to name files, classes, errors, methods and internal methods
 - `testing` — test levels, real dependencies, when mocks are allowed, isolation, no sleep, structure
 - `go-best-practices` — best practices for writing Go code
+- `spawn-session` — hand a task off to a new `claude` or `codex` session in a new tmux window or kitty tab (adapted from [parMaster/claude-dlc spawn-session](https://github.com/parMaster/claude-dlc/tree/main/plugins/agterm/skills/spawn-session), MIT)
 
 ## Hooks (PreToolUse)
 

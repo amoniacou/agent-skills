@@ -36,7 +36,10 @@ Only remove duplication that is the same rule. When that rule changes, every cop
 
 Code that looks alike but stands for different ideas is not duplication. Leave it alone, because the copies will drift apart.
 
-Wait for the third copy before extracting. One is a fact, two may be chance, three is a pattern. If unsure, inline first and see whether the duplication matters.
+The rule of three applies differently depending on whether you are discovering or creating duplication:
+
+- **Discovering duplication:** Wait for the third copy of existing code before extracting. One is a fact, two may be chance, three is a pattern. If unsure, inline first and see whether the duplication matters.
+- **Adding new code:** If you are writing new code that needs to exist in two places at once, extract the shared part immediately. Do not introduce duplication when you can see it from the start.
 
 The same rule holds for a one-line function or method that only reads a field or calls one other thing. Keep it only when it is called from at least three places, or when it hides a decision such as a nil check or a fallback. Otherwise write the expression where it is used. When a change removes that decision, inline the wrapper at every call site and delete it.
 

@@ -9,7 +9,7 @@
     {
       "name": "amoniac",
       "source": "./",
-      "description": "Skills (brainstorm, plan, helmcheck, principles, naming, testing, go-best-practices) and guard hooks (no comments, no git writes, no shell file writes)"
+      "description": "Skills (brainstorm, plan, helmcheck, principles, naming, testing, go-best-practices, spawn-session) and guard hooks (no comments, no git writes, no shell file writes)"
     }
   ]
 }
