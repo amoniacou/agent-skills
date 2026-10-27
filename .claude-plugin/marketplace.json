@@ -1,5 +1,5 @@
 {
-  "name": "skills",
+  "name": "amoniac-agent-skills",
   "description": "Amoniac company skills and guard hooks for Claude Code and Codex",
   "owner": {
     "name": "Amoniac",
@@ -9,7 +9,7 @@
     {
       "name": "amoniac",
       "source": "./",
-      "description": "Skills (brainstorm, plan, helmcheck, principles, naming, testing, go-best-practices, spawn-session) and guard hooks (no comments, no git writes, no shell file writes)"
+      "description": "Skills (brainstorm, plan, helmcheck, principles, naming, testing, go-best-practices, spawn-session) and guard hooks (no comments, no git writes, no shell file writes, required skills per project)"
     }
   ]
 }

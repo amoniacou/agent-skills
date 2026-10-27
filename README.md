@@ -19,18 +19,34 @@ Claude Code plugin with personal skills and guard hooks.
 - `block-git-writes.py` — allows only read-only git commands in Bash
 - `block-file-writes.py` — blocks file writes from Bash (`sed -i`, `>`, `tee`, heredocs…) outside `/tmp`
 - `remind-skills.py` — when a Write/Edit to a code file adds new files, names, abstractions or tests, reminds the agent to load `naming`, `principles` or `testing` (does not block)
+- `required-skills.py` — blocks Write/Edit until the skills the project requires for that file are loaded in the session. Loads are recorded from the `Skill` tool (PostToolUse) and from typed `/name` commands (UserPromptExpansion). The project lists them in `.agents/required-skills.json`, a map from file glob to skill names:
+
+  ```json
+  {
+    "*.go": ["amoniac:principles", "amoniac:go-best-practices", "golang-pro"],
+    "*_test.go": ["amoniac:testing"],
+    "charts/**/*.yaml": ["amoniac:helmcheck"]
+  }
+  ```
 
 ## Install
 
 ```
 /plugin marketplace add amoniacou/agent-skills
-/plugin install amoniac@skills
+/plugin install amoniac@amoniac-agent-skills
 ```
 
 Update on other machines:
 
 ```
-/plugin marketplace update skills
+/plugin marketplace update amoniac-agent-skills
+```
+
+For development, add the checkout as a marketplace instead of GitHub; it loads in place, and edits apply after `/reload-plugins` or a new session:
+
+```
+/plugin marketplace add /path/to/agent-skills
+/plugin install amoniac@amoniac-agent-skills
 ```
 
 ## Test
@@ -38,4 +54,5 @@ Update on other machines:
 ```
 python3 hooks/block-file-writes.test.py
 python3 hooks/remind-skills.test.py
+python3 hooks/required-skills.test.py
 ```

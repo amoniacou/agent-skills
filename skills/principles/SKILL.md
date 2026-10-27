@@ -12,6 +12,10 @@ Rules in priority order. When two rules conflict, the higher one wins.
 
 Build the simplest thing that meets today's requirements. Add a layer, option, parameter or extension point only when a concrete, current problem needs it. "We might need it later" is not a reason.
 
+Do not add an abstraction nobody asked for. Simple code is easier to read, easier to change and faster; every abstraction added for its own sake makes it worse at all three.
+
+When you think an abstraction is needed, write the plain version first and show it. Propose the abstraction separately, as a question, with the plain code next to it.
+
 Signs of going too far:
 
 - a base class with one child

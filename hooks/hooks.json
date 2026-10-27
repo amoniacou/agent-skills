@@ -12,6 +12,12 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/remind-skills.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/required-skills.py",
+            "timeout": 10,
+            "statusMessage": "Перевірка обов'язкових скілів"
           }
         ]
       },
@@ -29,6 +35,29 @@
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-file-writes.py",
             "timeout": 10,
             "statusMessage": "Перевірка запису у файли"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/required-skills.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/required-skills.py",
+            "timeout": 10
           }
         ]
       }
