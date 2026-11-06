@@ -7,9 +7,12 @@ import uuid
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "required-skills.py")
 
 CONFIG = {
-    "*.go": ["amoniac:principles", "amoniac:go-best-practices", "golang-pro"],
-    "*_test.go": ["amoniac:testing"],
-    "charts/**/*.yaml": ["amoniac:helmcheck"],
+    "always": ["amoniac:principles", "amoniac:naming"],
+    "files": {
+        "*.go": ["amoniac:principles", "amoniac:go-best-practices", "golang-pro"],
+        "*_test.go": ["amoniac:testing"],
+        "charts/**/*.yaml": ["amoniac:helmcheck"],
+    },
 }
 
 
@@ -21,13 +24,13 @@ def run(payload, env):
     return reason.split("loaded first: ")[1].split(". Load")[0].split(", ")
 
 
-def edit(root, session, path, env, tool="Edit"):
+def call(root, session, env, tool="Edit", tool_input=None):
     return run({
         "hook_event_name": "PreToolUse",
         "tool_name": tool,
         "session_id": session,
         "cwd": root,
-        "tool_input": {"file_path": path if path.startswith("/") else os.path.join(root, path)},
+        "tool_input": tool_input or {"file_path": os.path.join(root, "cmd/main.go")},
     }, env)
 
 
@@ -59,30 +62,71 @@ with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as run
     with open(os.path.join(root, ".agents", "required-skills.json"), "w") as handle:
         json.dump(CONFIG, handle)
 
+    always = ["amoniac:principles", "amoniac:naming"]
+
+    def edit(session, path, tool="Edit"):
+        return call(root, session, env, tool, {"file_path": path if path.startswith("/") else os.path.join(root, path)})
+
     s1 = str(uuid.uuid4())
-    check("go file, nothing loaded", edit(root, s1, "cmd/main.go", env),
-          ["amoniac:principles", "amoniac:go-best-practices", "golang-pro"])
-    check("go test file adds testing", edit(root, s1, "pkg/client_test.go", env),
-          ["amoniac:principles", "amoniac:go-best-practices", "golang-pro", "amoniac:testing"])
-    check("nested chart yaml", edit(root, s1, "charts/app/templates/deployment.yaml", env, "Write"), ["amoniac:helmcheck"])
-    check("unmatched file passes", edit(root, s1, "README.md", env, "Write"), [])
-    check("file outside the project passes", edit(root, s1, "/tmp/claude-1000/notes.go", env, "Write"), [])
-    check("bash tool passes", edit(root, s1, "cmd/main.go", env, "Bash"), [])
+    check("read blocked until always skills load", call(root, s1, env, "Read", {"file_path": "x"}), always)
+    check("bash blocked too", call(root, s1, env, "Bash", {"command": "make test"}), always)
+    check("mcp tool blocked too", call(root, s1, env, "mcp__docs__read", {}), always)
+    check("skill tool passes", call(root, s1, env, "Skill", {"skill": "amoniac:principles"}), [])
+    check("go edit lists always and file skills once", edit(s1, "cmd/main.go"),
+          ["amoniac:principles", "amoniac:naming", "amoniac:go-best-practices", "golang-pro"])
 
     load_via_tool(s1, "amoniac:principles", env)
-    load_via_slash(s1, "/amoniac:go-best-practices", env)
-    check("two loaded, one missing", edit(root, s1, "cmd/main.go", env), ["golang-pro"])
+    check("one always skill still blocks bash", call(root, s1, env, "Bash", {"command": "ls"}), ["amoniac:naming"])
 
+    load_via_slash(s1, "/amoniac:naming", env)
+    check("always loaded passes read", call(root, s1, env, "Read", {"file_path": "x"}), [])
+    check("always loaded passes bash", call(root, s1, env, "Bash", {"command": "ls"}), [])
+    check("go edit still needs file skills", edit(s1, "cmd/main.go"), ["amoniac:go-best-practices", "golang-pro"])
+    check("go test edit adds testing", edit(s1, "pkg/client_test.go"),
+          ["amoniac:go-best-practices", "golang-pro", "amoniac:testing"])
+    check("nested chart yaml", edit(s1, "charts/app/templates/deployment.yaml", "Write"), ["amoniac:helmcheck"])
+    check("unmatched file passes", edit(s1, "README.md", "Write"), [])
+    check("file outside the project passes", edit(s1, "/tmp/claude-1000/notes.go", "Write"), [])
+
+    load_via_tool(s1, "amoniac:go-best-practices", env)
     load_via_tool(s1, "golang-pro", env)
-    check("all loaded passes", edit(root, s1, "cmd/main.go", env), [])
-    check("test file still needs testing", edit(root, s1, "pkg/client_test.go", env), ["amoniac:testing"])
+    check("go edit passes once file skills load", edit(s1, "cmd/main.go"), [])
+    check("test file still needs testing", edit(s1, "pkg/client_test.go"), ["amoniac:testing"])
 
     s2 = str(uuid.uuid4())
-    check("other session starts empty", edit(root, s2, "cmd/main.go", env),
-          ["amoniac:principles", "amoniac:go-best-practices", "golang-pro"])
+    check("other session starts empty", call(root, s2, env, "Read", {"file_path": "x"}), always)
 
     with tempfile.TemporaryDirectory() as bare:
-        check("project without config passes", edit(bare, s2, "main.go", env), [])
+        check("project without config passes", call(bare, s2, env, "Bash", {"command": "ls"}), [])
+
+    with tempfile.TemporaryDirectory() as files_only:
+        os.makedirs(os.path.join(files_only, ".agents"))
+        with open(os.path.join(files_only, ".agents", "required-skills.json"), "w") as handle:
+            json.dump({"files": {"*.go": ["golang-pro"]}}, handle)
+        check("files-only config does not block bash", call(files_only, s2, env, "Bash", {"command": "ls"}), [])
+        check("files-only config blocks go edit",
+              call(files_only, s2, env, "Edit", {"file_path": os.path.join(files_only, "main.go")}), ["golang-pro"])
+
+    def session_start(cwd):
+        payload = json.dumps({"hook_event_name": "SessionStart", "session_id": s2, "cwd": cwd})
+        out = subprocess.run(["python3", HOOK], input=payload, capture_output=True, text=True, env=env).stdout.strip()
+        if not out:
+            return ""
+        return json.loads(out)["hookSpecificOutput"]["additionalContext"]
+
+    context = session_start(root)
+    lines = context.split("\n")
+    check("session start names always skills and blocks every tool",
+          "amoniac:principles, amoniac:naming" in lines[0] and "Every tool except Skill" in lines[0], True)
+    check("session start lists file skills per glob",
+          [line for line in lines[1:] if "*.go" in line or "*_test.go" in line or "charts/**/*.yaml" in line],
+          [
+              "Before a Write or Edit of *.go files, load: amoniac:principles, amoniac:go-best-practices, golang-pro.",
+              "Before a Write or Edit of *_test.go files, load: amoniac:testing.",
+              "Before a Write or Edit of charts/**/*.yaml files, load: amoniac:helmcheck.",
+          ])
+    with tempfile.TemporaryDirectory() as bare:
+        check("session start without config is silent", session_start(bare), "")
 
 print()
 print(f"{total - failures}/{total} passed")

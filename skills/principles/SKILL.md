@@ -16,6 +16,8 @@ Do not add an abstraction nobody asked for. Simple code is easier to read, easie
 
 When you think an abstraction is needed, write the plain version first and show it. Propose the abstraction separately, as a question, with the plain code next to it.
 
+"No new dependency" is not a reason by itself. Do not hand-write what a maintained library already does (sessions, crypto, auth, retries): a dependency costs less than owning that code. When proposing to write it yourself, name the library you are not taking and say why.
+
 Signs of going too far:
 
 - a base class with one child
@@ -65,6 +67,14 @@ Test with the real database, broker or service (docker-compose, testcontainers).
 
 Replace a dependency in tests only when running the real one is not possible or not reliable: time, randomness, paid or external third-party APIs.
 
-## 7. Read config in one place
+## 7. Test behaviour through the public entry point
+
+Drive the code the way its callers do: the exported function, the handler, the reconciler, the command. Assert on what comes out: the stored object, the response, the status, the file. Do not call unexported helpers or internal methods from a test; they are the shape of today's code, and the test has to be rewritten every time the shape changes.
+
+A value that is part of the public contract (a status phase, a reason, an API field, a URL) is written literally in the test. A value the code derives and nobody promises (a generated name, a hash, a registry entry) is read through the API or registry that produces it.
+
+If you changed the implementation and the test now fails for a reason other than a change in behaviour, do not rewrite the test to match. Test from the entry point instead.
+
+## 8. Read config in one place
 
 Read environment variables and config files once, at startup, into one config value. Pass what each part needs explicitly. Do not call `os.Getenv`, `ENV[...]` or `os.environ` deep inside handlers, routers or services.

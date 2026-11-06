@@ -1,6 +1,6 @@
 {
   "name": "amoniac",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Skills (brainstorm, plan, helmcheck, principles, naming, testing, go-best-practices, spawn-session) and guard hooks (no comments, no git writes, no shell file writes, required skills per project)",
   "author": {
     "name": "Amoniac",

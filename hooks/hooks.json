@@ -12,12 +12,17 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/remind-skills.py",
             "timeout": 10
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/required-skills.py",
             "timeout": 10,
-            "statusMessage": "Перевірка обов'язкових скілів"
+            "statusMessage": "Checking required skills"
           }
         ]
       },
@@ -28,13 +33,36 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-git-writes.py",
             "timeout": 10,
-            "statusMessage": "Перевірка git-команди"
+            "statusMessage": "Checking git command"
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-git-branches.py",
+            "timeout": 10,
+            "statusMessage": "Checking git branch reads"
           },
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-file-writes.py",
             "timeout": 10,
-            "statusMessage": "Перевірка запису у файли"
+            "statusMessage": "Checking shell file writes"
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/go-lookups.py",
+            "timeout": 10,
+            "statusMessage": "Checking Go code lookup"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/go-lookups.py",
+            "timeout": 10,
+            "statusMessage": "Checking Go code lookup"
           }
         ]
       }
@@ -42,6 +70,17 @@
     "PostToolUse": [
       {
         "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/required-skills.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
         "hooks": [
           {
             "type": "command",

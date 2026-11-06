@@ -8,6 +8,16 @@ when_to_use: Before creating or renaming a file or directory, a class, module, s
 
 Follow the language's own conventions first. The rules below fill the gaps.
 
+## Language
+
+Names use technical English in the style of ASD-STE100 (Simplified Technical English):
+
+- Only English words. No transliteration from other languages (`zapys`, `peredacha`), no mixed languages in one name.
+- One word has one meaning. Use the plain, common word: `start`, not `commence`; `use`, not `utilize`; `show`, not `render` when nothing is rendered.
+- Use the words in their main technical sense. No slang, jokes, idioms or metaphors: `remove`, not `nuke`; `Worker`, not `Minion`.
+- Keep a word once you pick it. The same thing has the same word in every name (see Consistency).
+- Abbreviate only what is standard in the field (`ID`, `URL`, `HTTP`, `ctx`, `cfg`). Write other words in full: `request`, not `rq`; `passage`, not `psg`.
+
 ## Classes, modules, structs
 
 - Name by the role in the domain, as a noun: `Consumer`, `Publisher`, `Executor`, `Launcher`. Say what it is, not how it is built.

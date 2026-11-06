@@ -18,3 +18,9 @@ When the code knows the types at compile time, write plain code. `reflect` is ma
 - copy a struct with assignment, not by walking its fields
 
 Use `reflect` only when the type is unknown until runtime and nothing else works: a serializer, a struct-tag parser, an ORM mapper. In tests, `reflect.DeepEqual` and `cmp.Diff` are fine.
+
+## 2. Look up code with gopls and go doc, not grep
+
+- Where a symbol of this repository is defined or used: the LSP tool (gopls) — `definition`, `references`, `documentSymbol`, `hover`. It is exact; grep matches text and misses or over-matches.
+- What a library exports: `go doc <pkg>`, `go doc <pkg>.<Type>`, `go doc <pkg>.<Type>.<Method>`, or LSP hover. Never read or grep sources under `$GOMODCACHE` (`pkg/mod`). If `go doc` says the package is not in the main module, `go get <module>@<version>` first.
+- grep and rg are for text: strings, log messages, annotations, yaml, docs.
