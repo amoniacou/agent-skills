@@ -1,0 +1,7 @@
+- Follow PEP 8; type hints on new public functions.
+- No bare `except:` or `except Exception: pass`; catch the narrowest error and never swallow it silently.
+- No mutable default arguments.
+- No `eval`, `exec`, `pickle.loads`, `yaml.load` without `SafeLoader`, or `subprocess` with `shell=True` on untrusted input.
+- No SQL built with f-strings or `%`; use query parameters.
+- Files and connections are closed with `with`.
+- Tests assert results, not that a `Mock` was called.

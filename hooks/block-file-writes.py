@@ -4,6 +4,8 @@ import os
 import re
 import sys
 
+from bash_hook import deny, mask_quoted_text
+
 RULE = (
     "Project files are edited only through Edit or Write: the user reviews the diff before it "
     "lands, while a shell edit slips past unseen and leaves the harness with a stale view of the "
@@ -15,6 +17,8 @@ RULE = (
 SAFE_REDIRECT = re.compile(r"(?:\d*>&\d+|&>>?\s*/dev/null|\d*>>?\s*/dev/(?:null|stdout|stderr)\b)")
 
 REDIRECT = re.compile(r"(?<![0-9&<>=!\-])>>?(?![=>])\s*(?:\"([^\"]+)\"|'([^']+)'|([^\s\"'|;&<>]+))")
+
+EVAL = re.compile(r"(?:^|&&|\|\||[;|(\n])\s*eval(?:\s|$)")
 
 TEE = re.compile(r"(?:^|[|&;(\s])tee(?:\s+-\S+)*\s+(?:\"([^\"]+)\"|'([^']+)'|([^\s\"'|;&<>]+))")
 
@@ -52,21 +56,6 @@ FETCH_OUT = [
 ALLOWED_PREFIXES = ("/dev/", "/tmp/", "/var/tmp/", "/proc/")
 
 
-def deny(reason):
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-    )
-    sys.exit(0)
-
-
 def target_allowed(raw, root):
     target = raw.strip().strip("\"'")
     if not target or target.startswith("$"):
@@ -81,14 +70,19 @@ def target_allowed(raw, root):
     return target.startswith(".git/")
 
 
+
 def check_command(command, root):
     cleaned = SAFE_REDIRECT.sub(" ", command)
+    unquoted = mask_quoted_text(cleaned)
+
+    if EVAL.search(unquoted):
+        deny("Blocked: eval runs a string as code, and this hook cannot check what it does. Run the command directly.")
 
     for pattern, name in INPLACE:
         if pattern.search(cleaned):
             deny("Blocked: %s edits the file in place. %s" % (name, RULE))
 
-    found = FILE_OPS.search(cleaned)
+    found = FILE_OPS.search(cleaned) or FILE_OPS.search(unquoted)
     if found:
         deny("Blocked: %s changes files. Ask the user to run it themselves with ! in the prompt." % found.group(1))
 
@@ -102,7 +96,7 @@ def check_command(command, root):
                 deny("Blocked: a download into the file %s. %s" % (found.group(1), RULE))
 
     for pattern, kind in ((REDIRECT, "a redirect"), (TEE, "tee")):
-        for match in pattern.finditer(cleaned):
+        for match in pattern.finditer(unquoted):
             target = next(g for g in match.groups() if g is not None)
             if not target_allowed(target, root):
                 deny("Blocked: %s into the file %s. %s" % (kind, target, RULE))

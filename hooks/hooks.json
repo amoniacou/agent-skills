@@ -49,9 +49,20 @@
           },
           {
             "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-output-filters.py",
+            "timeout": 10,
+            "statusMessage": "Checking output filters"
+          },
+          {
+            "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/go-lookups.py",
             "timeout": 10,
             "statusMessage": "Checking Go code lookup"
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/allow-debate-commands.py",
+            "timeout": 10
           }
         ]
       },

@@ -1,0 +1,6 @@
+- In TypeScript, no `any`, no `as` casts that hide a type error, no non-null `!` without a reason visible in the code.
+- No prototype pollution: no merging of untrusted objects into plain objects, no writes to keys taken from input.
+- No `eval`, `new Function` or `innerHTML` / `v-html` / `dangerouslySetInnerHTML` with untrusted data.
+- Every promise is awaited or returned; no floating promises, no `async` callbacks in `forEach`.
+- No new dependency added without need; check `package.json` changes.
+- Tests assert rendered output or returned values, not that a mocked function was called.

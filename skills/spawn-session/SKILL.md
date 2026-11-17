@@ -1,14 +1,15 @@
 ---
 name: spawn-session
-description: Hand off a task to a new, independent `claude` or `codex` session in a new tmux window or kitty tab — not a background subagent. Activates on "spawn a new session for this", "hand this off to a new session", "start a separate session for this job", "delegate this to a new terminal session", "run this in a separate/parallel session", "spin up a session for this slice", or when the user is slicing a larger job into pieces to hand off one at a time.
+description: Hand off a task to a new, independent `claude` or `codex` session in a new tuios window, herdr terminal, tmux window or kitty tab — not a background subagent. Activates on "spawn a new session for this", "hand this off to a new session", "start a separate session for this job", "delegate this to a new terminal session", "run this in a separate/parallel session", "spin up a session for this slice", or when the user is slicing a larger job into pieces to hand off one at a time.
 argument-hint: "[task description]"
 allowed-tools: Bash, AskUserQuestion, ListAgents
 ---
 
 # Spawn a Task in a Separate Session
 
-Hand a task prompt to a new `claude` or `codex` process in a new tmux window
-(when this session runs inside tmux) or a new kitty tab (inside kitty). The
+Hand a task prompt to a new `claude` or `codex` process in a new tuios window
+(when this session runs inside tuios), a new herdr terminal (inside herdr), a new
+tmux window (inside tmux) or a new kitty tab (inside kitty). The
 user can switch to it and drive it, and it keeps running after this
 conversation ends. Not an `Agent` subagent: those are hidden and die with this
 conversation.
@@ -81,18 +82,19 @@ Spawned from Claude session PARENT_NAME.
 ```
 
 Run one Bash call. The prompt goes in on stdin through a **quoted** heredoc
-(`<<'PROMPT_EOF'`) so it isn't shell-expanded. Don't pre-check tmux or kitty;
+(`<<'PROMPT_EOF'`) so it isn't shell-expanded. Don't pre-check tuios, herdr, tmux or kitty;
 the script does that and exits non-zero with a reason.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/spawn-session.sh" RUNTIME "$PWD" "SESSION_NAME" "CLI_FLAGS" <<'PROMPT_EOF'
+bash "SCRIPT" RUNTIME "$PWD" "SESSION_NAME" "CLI_FLAGS" <<'PROMPT_EOF'
 <task prompt from Step 1>
 <footer, Claude runtime with a PARENT_NAME only>
 PROMPT_EOF
 ```
 
 `RUNTIME` is `claude` or `codex`. Drop the `"CLI_FLAGS"` argument for
-**Inherit**.
+**Inherit**. `SCRIPT` is the absolute path of `scripts/spawn-session.sh`,
+relative to the directory of this SKILL.md.
 
 If the script rejects line 1, it names the saved prompt file. `Edit` just
 line 1 of that file into an imperative and rerun the same command with
@@ -100,8 +102,8 @@ line 1 of that file into an imperative and rerun the same command with
 
 ## Step 6: Report the outcome
 
-Exit 0: the stdout line says where it opened (`tmux window: <name>` or
-`kitty tab: <name>`). Report that, the runtime, and the model unless Inherit.
+Exit 0: the stdout line says where it opened (`tuios window: <name>`, `herdr terminal: <name> (<address>)`,
+`tmux window: <name>` or `kitty tab: <name>`). Report that, the runtime, and the model unless Inherit.
 Non-zero: quote stderr. If it says "not available", ask whether they want a
 background subagent instead of silently falling back to one. If it says the
 kitty socket is not set, relay the `kitty.conf` lines from the message and

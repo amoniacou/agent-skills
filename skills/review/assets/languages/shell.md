@@ -1,0 +1,5 @@
+- Scripts start with `set -euo pipefail` (or the shell's equivalent).
+- Every variable expansion is quoted: `"$var"`, `"${arr[@]}"`.
+- No `eval` and no unquoted command substitution on untrusted input.
+- Temporary files come from `mktemp` and are removed with a `trap`.
+- The script passes `shellcheck` without new warnings.

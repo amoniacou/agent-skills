@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import token
+import tokenize
 
 ALLOW = re.compile(
     r"(eslint-disable|prettier-ignore|@ts-|tslint:|noqa|type:\s*ignore|nolint"
@@ -39,12 +42,29 @@ GODOC_TARGET = re.compile(
 )
 
 
-def comment_lines(text, is_go=False):
+PYTHON_STRING_TOKENS = {token.STRING} | {getattr(token, name) for name in ("FSTRING_MIDDLE", "TSTRING_MIDDLE") if hasattr(token, name)}
+
+
+def find_python_string_rows(text: str) -> set[int]:
+    rows = set()
+    try:
+        for item in tokenize.generate_tokens(io.StringIO(text).readline):
+            if item.type in PYTHON_STRING_TOKENS:
+                rows.update(range(item.start[0], item.end[0] + 1))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return set()
+    return rows
+
+
+def comment_lines(text, is_go=False, is_python=False):
     found = []
     in_helm_comment = False
     in_helmdocs = False
     doc_block = []
+    string_rows = find_python_string_rows(text) if is_python else set()
     for index, line in enumerate(text.splitlines()):
+        if index + 1 in string_rows:
+            continue
         stripped = line.strip()
         if is_go and doc_block:
             if GODOC.match(stripped):
@@ -87,11 +107,11 @@ def comment_lines(text, is_go=False):
     return found
 
 
-def baseline(path, is_go=False):
+def baseline(path, is_go=False, is_python=False):
     known = set()
     try:
         with open(path, encoding="utf-8", errors="replace") as handle:
-            known.update(comment_lines(handle.read(), is_go))
+            known.update(comment_lines(handle.read(), is_go, is_python))
     except OSError:
         pass
     try:
@@ -103,7 +123,7 @@ def baseline(path, is_go=False):
             timeout=10,
         )
         if head.returncode == 0:
-            known.update(comment_lines(head.stdout, is_go))
+            known.update(comment_lines(head.stdout, is_go, is_python))
     except (OSError, subprocess.SubprocessError):
         pass
     return known
@@ -141,18 +161,19 @@ def main():
         return 0
 
     is_go = path.lower().endswith(".go")
+    is_python = path.lower().endswith(".py")
 
     if tool == "Write":
-        candidates = comment_lines(data.get("content", ""), is_go)
-        known = baseline(path, is_go)
+        candidates = comment_lines(data.get("content", ""), is_go, is_python)
+        known = baseline(path, is_go, is_python)
     elif tool == "Edit":
-        known = baseline(path, is_go)
+        known = baseline(path, is_go, is_python)
         applied = applied_text(path, data)
         if applied is not None:
-            candidates = comment_lines(applied, is_go)
+            candidates = comment_lines(applied, is_go, is_python)
         else:
-            candidates = comment_lines(data.get("new_string", ""), is_go)
-            replaced = comment_lines(data.get("old_string", ""), is_go)
+            candidates = comment_lines(data.get("new_string", ""), is_go, is_python)
+            replaced = comment_lines(data.get("old_string", ""), is_go, is_python)
             if len(candidates) <= len(replaced):
                 return 0
             known |= set(replaced)

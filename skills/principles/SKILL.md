@@ -16,6 +16,8 @@ Do not add an abstraction nobody asked for. Simple code is easier to read, easie
 
 When you think an abstraction is needed, write the plain version first and show it. Propose the abstraction separately, as a question, with the plain code next to it.
 
+Do not pick the more complex option yourself. When a simple option and a more complex one both work, show both, recommend the simple one, and ask. A typical case: the work can finish in two passes (a requeue, a second reconcile, a second run), or in one pass with added state (a status field, a flag, a phase, a cache, ordering logic). The extra complexity is the user's choice, not yours.
+
 "No new dependency" is not a reason by itself. Do not hand-write what a maintained library already does (sessions, crypto, auth, retries): a dependency costs less than owning that code. When proposing to write it yourself, name the library you are not taking and say why.
 
 Signs of going too far:

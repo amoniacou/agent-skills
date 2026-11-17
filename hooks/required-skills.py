@@ -2,10 +2,19 @@
 import fnmatch
 import json
 import os
+import re
 import sys
+
+from bash_hook import split_words
 
 CONFIG = os.path.join(".agents", "required-skills.json")
 MARKERS = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "claude-skills")
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PLUGIN_NAME = "amoniac"
+USER_SKILL_DIRS = (".claude/skills", ".agents/skills", ".codex/skills")
+METACHARACTERS = re.compile(r"[;&|<>$`\n\r]")
+READERS = {"cat", "head", "nl"}
+SKILL_FILE = re.compile(r".*/skills/([^/]+)/SKILL\.md")
 
 
 def session_dir(payload):
@@ -58,6 +67,9 @@ def announce(root):
             f"This project requires these skills ({CONFIG}): " + ", ".join(unique(always))
             + ". Every tool except Skill is blocked until each one is loaded."
             " Load them with the Skill tool now, as the first thing you do."
+            " Without a Skill tool, read each SKILL.md with cat, one command for each file: "
+            + "; ".join(describe_skill_file(skill) for skill in unique(always))
+            + "."
         )
     for pattern, names in files.items():
         lines.append(f"Before a Write or Edit of {pattern} files, load: " + ", ".join(unique(names)) + ".")
@@ -67,6 +79,39 @@ def announce(root):
         {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(lines)}},
         sys.stdout,
     )
+
+
+def find_skill_file(skill: str) -> str | None:
+    prefix, _, name = skill.rpartition(":")
+    if prefix == PLUGIN_NAME:
+        candidates = [os.path.join(PLUGIN_ROOT, "skills", name, "SKILL.md")]
+    else:
+        home = os.path.expanduser("~")
+        candidates = [os.path.join(home, directory, name, "SKILL.md") for directory in USER_SKILL_DIRS]
+    return next((path for path in candidates if os.path.isfile(path)), None)
+
+
+def find_read_skill_files(command: str) -> list[str]:
+    if METACHARACTERS.search(command):
+        return []
+    words = split_words(command)
+    if not words or words[0] not in READERS | {"sed"}:
+        return []
+    paths = words[1:]
+    if words[0] == "sed":
+        if paths[:1] != ["-n"] or len(paths) < 2:
+            return []
+        paths = paths[2:]
+    elif paths[:1] == ["-ba"]:
+        paths = paths[1:]
+    if not paths or not all(SKILL_FILE.fullmatch(path) for path in paths):
+        return []
+    return [os.path.realpath(os.path.expanduser(path)) for path in paths]
+
+
+def describe_skill_file(skill: str) -> str:
+    path = find_skill_file(skill)
+    return f"{skill}: {path}" if path else f"{skill}: no SKILL.md found, ask the user"
 
 
 def deny(tool, skills):
@@ -79,6 +124,9 @@ def deny(tool, skills):
                     f"Blocked: {tool} needs these skills loaded first: "
                     + ", ".join(skills)
                     + ". Load each one with the Skill tool, then run this call again."
+                    + " Without a Skill tool, read each SKILL.md with cat, one command for each file: "
+                    + "; ".join(describe_skill_file(skill) for skill in skills)
+                    + "."
                 ),
             }
         },
@@ -114,6 +162,14 @@ def main():
     if tool in ("Write", "Edit") and data.get("file_path"):
         skills = skills + required_for_file(root, data["file_path"])
     missing = [skill for skill in unique(skills) if not os.path.exists(os.path.join(directory, skill))]
+    if missing and tool == "Bash":
+        read = find_read_skill_files(data.get("command") or "")
+        if read:
+            for skill in missing:
+                path = find_skill_file(skill)
+                if path and os.path.realpath(path) in read:
+                    mark(payload, skill)
+            return 0
     if missing:
         deny(tool, missing)
     return 0

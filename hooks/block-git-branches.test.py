@@ -35,6 +35,9 @@ CASES = [
     ("after &&", "cd /home/user/other && git branch --show-current", DENY),
     ("no git passes", "ls -la", PASS),
     ("word git in grep passes", "grep -rn 'git' README.md", PASS),
+    ("inside zsh -lc", "zsh -lc \"git branch -a\"", DENY),
+    ("inside /bin/zsh -lc", "/bin/zsh -lc 'git log --all --oneline'", DENY),
+    ("quoted text passes", "echo \"x; git branch -a\"", PASS),
 ]
 
 

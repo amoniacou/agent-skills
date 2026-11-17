@@ -5,6 +5,9 @@ import tempfile
 import uuid
 
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "required-skills.py")
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PRINCIPLES = os.path.join(PLUGIN_ROOT, "skills", "principles", "SKILL.md")
+NAMING = os.path.join(PLUGIN_ROOT, "skills", "naming", "SKILL.md")
 
 CONFIG = {
     "always": ["amoniac:principles", "amoniac:naming"],
@@ -16,11 +19,15 @@ CONFIG = {
 }
 
 
-def run(payload, env):
+def run_reason(payload, env):
     out = subprocess.run(["python3", HOOK], input=json.dumps(payload), capture_output=True, text=True, env=env).stdout.strip()
-    if not out:
+    return json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"] if out else ""
+
+
+def run(payload, env):
+    reason = run_reason(payload, env)
+    if not reason:
         return []
-    reason = json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
     return reason.split("loaded first: ")[1].split(". Load")[0].split(", ")
 
 
@@ -96,6 +103,35 @@ with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as run
     s2 = str(uuid.uuid4())
     check("other session starts empty", call(root, s2, env, "Read", {"file_path": "x"}), always)
 
+    with tempfile.TemporaryDirectory() as home:
+        home_env = {**env, "HOME": home}
+        go_edit = {"hook_event_name": "PreToolUse", "tool_name": "Edit", "session_id": s2, "cwd": root,
+                   "tool_input": {"file_path": os.path.join(root, "cmd/main.go")}}
+        reason = run_reason(go_edit, home_env)
+        check("denial gives the SKILL.md path of a plugin skill", f"amoniac:principles: {PRINCIPLES}" in reason, True)
+        check("denial tells when a user skill has no SKILL.md", "golang-pro: no SKILL.md found, ask the user" in reason, True)
+        user_skill = os.path.join(home, ".claude", "skills", "golang-pro", "SKILL.md")
+        os.makedirs(os.path.dirname(user_skill))
+        open(user_skill, "w").close()
+        check("denial gives the SKILL.md path of a user skill", f"golang-pro: {user_skill}" in run_reason(go_edit, home_env), True)
+
+        s3 = str(uuid.uuid4())
+
+        def bash(command):
+            return call(root, s3, home_env, "Bash", {"command": command})
+
+        check("cat of a SKILL.md and git push stays blocked", bash(f"cat {PRINCIPLES}; git push"), always)
+        check("cat of an unknown SKILL.md passes", bash(f"cat {home}/x/skills/naming/SKILL.md"), [])
+        check("unknown SKILL.md loads nothing", bash("ls"), always)
+        check("cat of a skill file passes", bash(f"cat {PRINCIPLES}"), [])
+        check("cat loads that skill only", bash("ls"), ["amoniac:naming"])
+        check("sed -n of a skill file passes", bash(f"sed -n '1,200p' '{NAMING}'"), [])
+        check("all skills read: bash passes", bash("git status"), [])
+
+        s4 = str(uuid.uuid4())
+        check("one cat of two skill files passes", call(root, s4, home_env, "Bash", {"command": f"cat {PRINCIPLES} {NAMING}"}), [])
+        check("one cat loads both skills", call(root, s4, home_env, "Bash", {"command": "ls"}), [])
+
     with tempfile.TemporaryDirectory() as bare:
         check("project without config passes", call(bare, s2, env, "Bash", {"command": "ls"}), [])
 
@@ -118,6 +154,7 @@ with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as run
     lines = context.split("\n")
     check("session start names always skills and blocks every tool",
           "amoniac:principles, amoniac:naming" in lines[0] and "Every tool except Skill" in lines[0], True)
+    check("session start gives the SKILL.md paths", f"amoniac:principles: {PRINCIPLES}; amoniac:naming: {NAMING}" in lines[0], True)
     check("session start lists file skills per glob",
           [line for line in lines[1:] if "*.go" in line or "*_test.go" in line or "charts/**/*.yaml" in line],
           [

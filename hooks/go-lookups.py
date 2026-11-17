@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 import json
+import os
 import re
 import sys
 
+from bash_hook import split_commands, split_words, strip_prefix_words
+
 MODCACHE = "/pkg/mod/"
-GODOC_FILTERED = re.compile(r"\bgo\s+(-C\s+\S+\s+)?doc\b[^|]*\|\s*(grep|rg|awk|sed|ag|ack)\b")
+TEXT_FILTERS = {"grep", "rg", "awk", "sed", "ag", "ack"}
 SEARCH_TOOL = re.compile(r"\b(grep|rg|ag|ack)\b")
 GO_FILES = re.compile(r"--include=['\"]?\*?\.go\b|\S+\.go\b|(?:-t|--type[= ])\s*go\b|-g\s*['\"]?\*\.go\b")
 
@@ -30,12 +33,31 @@ GREP_REMINDER = (
 )
 
 
+def runs_go_doc(stage: str) -> bool:
+    words = strip_prefix_words(split_words(stage))
+    if not words or os.path.basename(words[0]) != "go":
+        return False
+    words = words[1:]
+    if words[:1] == ["-C"]:
+        words = words[2:]
+    return words[:1] == ["doc"]
+
+
+def filters_go_doc(command: str) -> bool:
+    for stages in split_commands(command):
+        for stage, next_stage in zip(stages, stages[1:]):
+            words = split_words(next_stage)
+            if runs_go_doc(stage) and words and os.path.basename(words[0]) in TEXT_FILTERS:
+                return True
+    return False
+
+
 def denial(tool, data):
     if tool == "Bash":
         command = data.get("command", "")
         if MODCACHE in command:
             return MODCACHE_REASON
-        if GODOC_FILTERED.search(command):
+        if filters_go_doc(command):
             return FILTERED_REASON
     elif tool in ("Read", "Grep"):
         if MODCACHE in (data.get("file_path") or data.get("path") or ""):

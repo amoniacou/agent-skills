@@ -1,0 +1,6 @@
+- Follow the Ruby Style Guide (RuboCop conventions).
+- No unsafe `eval`, `send`, `public_send` or `constantize` on user input.
+- No `rescue Exception`; rescue the narrowest error class, and never swallow an error silently.
+- No SQL built by string interpolation; use bound parameters or the query builder.
+- No N+1 queries in loops over records.
+- Specs assert behaviour through the public entry point; no `allow(...).to receive(...).and_return(...)` on the object under test.

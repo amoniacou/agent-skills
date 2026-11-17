@@ -1,0 +1,1 @@
+Write in ASD-STE100 English. Write the answer to the file {{directory}}/review-{{round}}.md. This file is the only exception to the READ-ONLY rule: do not create or change other files. Do not answer on the screen. Then run this command: tuios send-agent-message -w {{author}} --subject review-{{round}} 'done'

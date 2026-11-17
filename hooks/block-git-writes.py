@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import json
 import re
-import shlex
 import sys
+
+from bash_hook import deny, split_commands, split_words, strip_prefix_words
 
 READ_ONLY = {
     "status",
@@ -142,44 +143,7 @@ MUTATING = {
     "gitk",
 }
 
-GIT_PREFIX_WORDS = {"sudo", "env", "time", "nice", "ionice", "command", "xargs", "then", "else", "do", "!"}
-
 GLOBAL_VALUE_OPTS = {"-c", "-C", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"}
-
-SEGMENT_SPLIT = re.compile(r"\|\||&&|\||;|\n|\$\(|`|\(|\)")
-
-
-def deny(reason):
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-    )
-    sys.exit(0)
-
-
-def tokenize(segment):
-    try:
-        return shlex.split(segment)
-    except ValueError:
-        return segment.split()
-
-
-def strip_prefix(tokens):
-    i = 0
-    while i < len(tokens):
-        t = tokens[i]
-        if t in GIT_PREFIX_WORDS or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", t):
-            i += 1
-        else:
-            break
-    return tokens[i:]
 
 
 def strip_global_opts(tokens):
@@ -226,20 +190,20 @@ def check_git(args):
     if sub == "config":
         if any(f in rest or any(r.startswith(f + "=") for r in rest) for f in CONFIG_READ_FLAGS):
             return None
-        return "git config змінює конфігурацію"
+        return "git config changes the configuration"
 
     if sub in LIST_LIKE:
         if list_like_is_safe(sub, rest):
             return None
-        return "git %s у цій формі створює, перейменовує або видаляє ref" % sub
+        return "git %s in this form creates, renames or deletes a ref" % sub
 
     if sub in SUBCOMMAND_ALLOW:
         nested = rest[0] if rest else ""
         if nested in SUBCOMMAND_ALLOW[sub]:
             return None
-        return "git %s %s змінює стан репозиторію" % (sub, nested)
+        return "git %s %s changes the repository" % (sub, nested)
 
-    return "git %s змінює стан репозиторію, індексу або віддаленого сховища" % sub
+    return "git %s changes the repository, the index or a remote" % sub
 
 
 def main():
@@ -252,28 +216,29 @@ def main():
     if "git" not in command:
         sys.exit(0)
 
-    for segment in SEGMENT_SPLIT.split(command):
-        tokens = strip_prefix(tokenize(segment))
-        if not tokens:
-            continue
-        head = tokens[0]
-        if head == "git" or head.endswith("/git"):
-            reason = check_git(tokens[1:])
-            if reason:
-                deny(
-                    "Заблоковано: %s. Дозволені лише read-only git-команди "
-                    "(status, log, diff, show, blame, rev-parse тощо). "
-                    "Попроси користувача виконати це самостійно через ! у промпті." % reason
-                )
+    for stages in split_commands(command):
+        for stage in stages:
+            tokens = strip_prefix_words(split_words(stage))
+            if not tokens:
+                continue
+            head = tokens[0]
+            if head == "git" or head.endswith("/git"):
+                reason = check_git(tokens[1:])
+                if reason:
+                    deny(
+                        "Blocked: %s. Only read-only git commands are allowed "
+                        "(status, log, diff, show, blame, rev-parse and similar). "
+                        "Ask the user to run it themselves with ! in the prompt." % reason
+                    )
 
     for match in re.finditer(r"\bgit\s+(?:-\S+\s+)*([a-z][a-z-]*)", command):
         sub = match.group(1)
         if sub not in MUTATING:
             continue
         deny(
-            "Заблоковано: git %s змінює стан репозиторію. Дозволені лише read-only "
-            "git-команди (status, log, diff, show, blame, rev-parse тощо). "
-            "Попроси користувача виконати це самостійно через ! у промпті." % sub
+            "Blocked: git %s changes the repository. Only read-only git commands "
+            "are allowed (status, log, diff, show, blame, rev-parse and similar). "
+            "Ask the user to run it themselves with ! in the prompt." % sub
         )
 
     sys.exit(0)
