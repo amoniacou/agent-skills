@@ -12,8 +12,6 @@ Each skill uses the [Agent Skills](https://agentskills.io/specification) layout:
 - `review-plan` — finds the plan and runs the full `/amoniac:review` cycle on it
 - `backlog` — deferred work in `docs/backlog/`, one file per item, with a `worth: yes | later | no` triage
 - `oversight` — scope, Definition of Done and iterations of a multi-plan epic in `docs/plans/wbs-<slug>.md`; starts each iteration with `spawn-session`
-
-`plan`, `review-plan`, the plan checklist, `backlog` and `oversight` are adapted from [parMaster/claude-dlc planning](https://github.com/parMaster/claude-dlc/tree/main/plugins/planning) (MIT): rewritten in ASD-STE100, no commits or `git rm` by the agent, no agterm dependency, no backlog dashboard.
 - `helmcheck` — Helm chart rules: workload baseline, values, secrets, migrations and hooks, availability, releases, validation with kubeconform and conftest
 - `principles` — KISS/YAGNI, prefer deletion, DRY by the rule of three, fail loudly, test against real dependencies through the public entry point
 - `naming` — how to name files, classes, errors, methods and internal methods
@@ -45,7 +43,7 @@ With an agent in the arguments, only that agent reviews. Nothing is fixed before
 The prompt carries the rules, so a reviewer that cannot load skills still gets them:
 
 - skills from `.agents/required-skills.json` (`always`, plus `files` globs that match the changed files); without that file, `principles` and `naming`, plus `go-best-practices`, `testing` or `helmcheck` by file type. `amoniac:` skills are put into the prompt in full; other skills are named for the reviewer to load;
-- for a diff, language rules from `skills/review/assets/languages/` (Ruby, JavaScript/TypeScript, Python, shell) by file type;
+- for a diff, language rules from `skills/review/assets/languages/` (Ruby, JavaScript/TypeScript, Python, shell) by file type. The prompt holds no diff text, so a large change does not make it too large: it gives the `git diff HEAD -- <files>` command and the list of new files, and the reviewer runs and reads them;
 - for a plan, the plan checklist and the skills in the plan's `**Skills:**` line.
 
 `.agents/review.json` in the project (optional) sets the files that the diff leaves out:
@@ -59,7 +57,7 @@ The prompt carries the rules, so a reviewer that cannot load skills still gets t
 `/amoniac:review-plan` finds the plan and runs the same cycle on it.
 
 - Each reviewer starts from a herdr-core template in `~/.config/herdr-core/templates/`: `amoniac-review-claude` or `amoniac-review-codex`.
-- The reviewer writes each answer to a file. It can write only in `$XDG_RUNTIME_DIR/amoniac/reviews`: `claude` through `Edit(...)` in `--allowedTools`, `codex` through a read-only permission profile with that one writable folder.
+- The reviewer writes each answer to a file. It can write only in `$XDG_RUNTIME_DIR/amoniac/reviews`: `claude` through `Edit(...)` in `--allowedTools` (with `Read`, `Glob`, `Grep`, `hc send` and `git diff`), `codex` through a read-only permission profile with that one writable folder.
 - Then it sends the notice `review-N done` with `hc send`.
 - Both run with no permission prompts: `claude` with `--permission-mode dontAsk`, `codex` with `approval_policy=never`. A forbidden action is refused, not asked.
 - The prompt and the answers are in `$XDG_RUNTIME_DIR/amoniac/reviews/<author>/<debate>/`, not in the repository.
@@ -74,7 +72,7 @@ In herdr, start codex with `codex --no-daemon`. Without the flag, codex runs com
 - `block-comments.py` — blocks Write/Edit that add new code comments (override: `CLAUDE_ALLOW_COMMENTS=1`)
 - `block-git-writes.py` — allows only read-only git commands in Bash
 - `block-git-branches.py` — blocks reading branches and refs from Bash (`git branch`, `symbolic-ref`, `ls-remote`, `describe`, `rev-parse --abbrev-ref`, `log/show/diff --all` or against `origin/...`); the agent works on the checked-out tree and asks when it needs a branch name
-- `block-file-writes.py` — blocks file writes from Bash (`sed -i`, `>`, `tee`, heredocs…) outside `/tmp`, and every `eval`. Text in quotes is not taken for a redirect; the code after `sh -c` / `bash -lc` is checked as a command
+- `block-file-writes.py` — blocks file writes from Bash (`sed -i`, `>`, `tee`, heredocs…) outside `/tmp`, every `eval`, and `make -n` (it still runs recipe lines with `$(MAKE)` or `+`). Text in quotes is not taken for a redirect; the code after `sh -c` / `bash -lc` is checked as a command
 - `block-output-filters.py` — blocks a pipe that filters command output with `sed`, `awk` or `perl`, or with two or more filters (`grep`, `head`, `tail`, `sort`, `jq`…), and any filter after `gh`, `curl`, `wget` or `npm view`. The agent saves the output to a file in the scratchpad and searches it with Grep or Read. One filter after a local command (`make test 2>&1 | tail -30`) passes
 - `go-lookups.py` — blocks Bash, Read and Grep that touch the Go module cache (`pkg/mod`) and `go doc … | grep`; library APIs are read with `go doc <pkg>` and `go doc <pkg>.<Symbol>` (after `go get` when the module is not a dependency yet) or through the LSP tool (gopls). When grep/rg targets Go files, reminds that LSP definition/references are exact for symbols (does not block)
 - `allow-debate-commands.py` — lets the review debate run without a permission prompt in each round. It allows only `skills/review/scripts/debate.py` of this plugin, with its absolute path (`env`, `start`, `answer`, and `ask` with one quoted heredoc), `hc wait --children any --json --timeout N` and `hc read ADDRESS [--lines N]`. It never denies: a command in another shape gets the normal permission flow, and a deny from another hook wins
@@ -119,3 +117,7 @@ make test
 ```
 
 It runs each `hooks/*.test.py` and `skills/*/scripts/*.test.py`. One file: `make hooks/block-file-writes.test.py`. `make -k test` shows all failures, not only the first.
+
+## Credits
+
+`plan`, `review-plan`, the plan checklist, `backlog` and `oversight` started from [parMaster/claude-dlc planning](https://github.com/parMaster/claude-dlc/tree/main/plugins/planning) (MIT), and were rewritten since.
