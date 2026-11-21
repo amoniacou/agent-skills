@@ -45,8 +45,13 @@ A small bug fix can need 20 lines. If a plan becomes longer than approximately 1
    - Kubernetes or Helm: also find the dashboards, Alloy configs, RBAC and ConfigMaps that the change can affect.
    - Not clear: run `git status` and `git log --oneline -5`. Read README.md and CLAUDE.md.
 
-   Read approximately 5 files. Read more in these conditions:
-   - `docs/plans/` or `docs/plans/completed/` has a plan for the same feature.
+   Find the earlier decisions and the deferred work. Use Grep with the paths, the names and the main words of the area:
+   - in `docs/plans/completed/` and `docs/plans/`. Read each plan that matches. A completed plan holds only its title, Goal and Decisions.
+   - in `docs/backlog/`, if it exists: in the `where` paths and in the text of the items. Read each item that matches.
+
+   An earlier decision is a rule for this plan. If this plan keeps it, do not write it again. If this plan changes it, write one line in **Decisions** that names the earlier plan.
+
+   Read approximately 5 files of code. Read more in these conditions:
    - A `docs/plans/wbs-*.md` file shows this work as an iteration.
    - The user says that this change is one part of a larger task.
 
@@ -63,7 +68,7 @@ A small bug fix can need 20 lines. If a plan becomes longer than approximately 1
 
 5. **Find the test command.** Use the `test` target in the `Makefile`. If there is no target, use the test step of the CI workflow. If there is no step, use the default of the language, for example `go test ./...`. The Wrap-up section of the plan uses this command.
 
-6. **Show the result** in 3–5 bullets. Also give the names of the skills that you loaded in item 2.
+6. **Show the result** in 3–5 bullets. Also give the names of the skills that you loaded in item 2, and the completed plans and backlog items that you found in item 3.
 
 ## Step 1: Ask the questions
 
@@ -124,7 +129,7 @@ Use the answer to Step 1, question 4:
 
 ### Backlog items
 
-Do this only if `docs/backlog/` exists. Compare the `where` paths of the items with the area of the change. For each match with `worth: yes`, ask with AskUserQuestion if the plan must include it. An included item gets its own Definition of Done line. That line includes the deletion of `docs/backlog/<slug>.md` in the same change. See the lifecycle in `/amoniac:backlog`. Items with `later` or `no` are only context. Do not ask about them.
+Do this only if `docs/backlog/` exists. Use the backlog items that you found in Step 0, item 3. For each item with `worth: yes`, ask with AskUserQuestion if the plan must include it. An included item gets its own Definition of Done line. That line includes the deletion of `docs/backlog/<slug>.md` in the same change. See the lifecycle in `/amoniac:backlog`. Items with `later` or `no` are only context. Do not ask about them.
 
 ### Tests for each kind of change
 

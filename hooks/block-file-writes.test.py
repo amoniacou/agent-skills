@@ -80,6 +80,21 @@ CASES = [
     (ALLOW, "grep -rn 'a=>b' src/"),
     (ALLOW, "gofmt -r 'a.Spec.Target.Channel -> &a.Spec.Channel' -w api internal tests"),
     (ALLOW, "gofmt -l ./internal"),
+    (DENY, "make -n test"),
+    (DENY, "make --dry-run test"),
+    (DENY, "make --just-print"),
+    (DENY, "make -kn test"),
+    (DENY, "make -C sub -n test"),
+    (DENY, "/usr/bin/make -n"),
+    (DENY, "git status && make -n test 2>&1 | head -20"),
+    (DENY, "bash -c 'make -n test'"),
+    (ALLOW, "make test"),
+    (ALLOW, "make -k test"),
+    (ALLOW, "make -C nested test"),
+    (ALLOW, "make -f night.mk test"),
+    (ALLOW, "make -j4 test"),
+    (ALLOW, "make PKG=./internal/n test"),
+    (ALLOW, "grep -n test Makefile"),
 ]
 
 

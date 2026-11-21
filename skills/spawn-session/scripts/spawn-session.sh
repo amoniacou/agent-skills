@@ -40,12 +40,7 @@ esac
 
 COMMAND="$RUNTIME${CLI_FLAGS:+ $CLI_FLAGS} \"\$(cat '$PROMPT_FILE')\""
 
-if [ "${TUIOS_ENV:-}" = 1 ] && command -v tuios >/dev/null 2>&1; then
-  WINDOW=$(tuios new-window "$SESSION_NAME" -s "$TUIOS_SESSION" --cwd "$CWD" --no-focus --print-id)
-  tuios send-text -s "$TUIOS_SESSION" -w "$WINDOW" "$COMMAND"
-  tuios send-keys -s "$TUIOS_SESSION" -w "$WINDOW" Enter
-  echo "tuios window: $SESSION_NAME"
-elif [ -n "${HC_TERMINAL_ID:-}" ] && command -v hc >/dev/null 2>&1; then
+if [ -n "${HC_TERMINAL_ID:-}" ] && command -v hc >/dev/null 2>&1; then
   NAME=$(printf '%s' "$SESSION_NAME" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9_-' '-' | sed 's/^-*//; s/-*$//' | cut -c1-32)
   SPACE=$(hc get "$HC_TERMINAL_ID" --json | python3 -c 'import json, sys; print(json.load(sys.stdin).get("labels", {}).get("herdr.space", ""))')
   STARTED=$(hc run --bg --json --no-parent --outlive-parent --name "${NAME:-spawn}" ${SPACE:+--label "herdr.space=$SPACE"} --cwd "$CWD")
@@ -66,6 +61,6 @@ elif [ -n "${KITTY_WINDOW_ID:-}" ] && command -v kitty >/dev/null 2>&1; then
   printf '%s\r' "$COMMAND" | kitty @ send-text --match "id:$WINDOW" --stdin
   echo "kitty tab: $SESSION_NAME"
 else
-  echo "spawn-session: not available — not running inside tuios, herdr, tmux or kitty" >&2
+  echo "spawn-session: not available — not running inside herdr, tmux or kitty" >&2
   exit 1
 fi

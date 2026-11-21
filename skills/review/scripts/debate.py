@@ -17,6 +17,7 @@ SCRIPT = os.path.abspath(__file__)
 SKILL_ROOT = os.path.dirname(os.path.dirname(SCRIPT))
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(SKILL_ROOT))
 ASSETS = os.path.join(SKILL_ROOT, "assets")
+TEMPLATES = os.path.join(ASSETS, "templates")
 PROMPT_NAME = "review-prompt.md"
 REQUIRED_SKILLS = os.path.join(".agents", "required-skills.json")
 REVIEW_CONFIG = os.path.join(".agents", "review.json")
@@ -54,14 +55,7 @@ LANGUAGES = {
 FRONTMATTER = re.compile(r"\A---\n.*?\n---\n", re.S)
 SKILLS_LINE = re.compile(r"^\*\*Skills:\*\*(.*)$", re.M)
 
-CODEX_RULES = {
-    "tuios": 'prefix_rule(pattern=["tuios", "send-agent-message"], decision="allow")',
-    "herdr": 'prefix_rule(pattern=["hc", "send"], decision="allow")',
-}
-
-MUX_TOOLS = {"tuios": "tuios", "herdr": "hc"}
-
-TUIOS_ASK_TIMEOUT = ("timed out", "timeout")
+CODEX_RULE = 'prefix_rule(pattern=["hc", "send"], decision="allow")'
 
 PANE_LABELS = ("herdr.space", "herdr.tab")
 
@@ -155,9 +149,9 @@ def build_rules(skills: list[str], languages: Iterable[str] = ()) -> str:
     return "\n\n".join(blocks)
 
 
-def run_git(root: str, *args: str, allowed: tuple[int, ...] = (0,)) -> str:
+def run_git(root: str, *args: str) -> str:
     result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
-    if result.returncode not in allowed:
+    if result.returncode != 0:
         raise DebateError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout
 
@@ -177,15 +171,16 @@ def build_diff_prompt(root: str, exclude: list[str]) -> str | None:
     if not files:
         return None
 
-    parts = [run_git(root, "diff", "HEAD", "--", *tracked)] if tracked else []
-    parts.extend(run_git(root, "diff", "--no-index", "--", "/dev/null", path, allowed=(0, 1)) for path in untracked)
+    command = " ".join(["git diff HEAD --", *map(shlex.quote, tracked)]) if tracked else "none"
+    new_files = "\n".join(f"- {path}" for path in untracked) or "none"
 
     languages = [name for name, patterns in LANGUAGES.items() if any(matches(path, p) for path in files for p in patterns)]
     template = read_text(os.path.join(ASSETS, "diff-review.md"))
     return (
         template.replace("{{rules}}", build_rules(skills_for_files(root, files), languages))
         .replace("{{files}}", "\n".join(f"- {path}" for path in files))
-        .replace("{{diff}}", "".join(parts).strip())
+        .replace("{{diff_command}}", command)
+        .replace("{{new_files}}", new_files)
     )
 
 
@@ -212,30 +207,18 @@ def fill_template(template: str, **values: object) -> str:
 
 
 def detect_mux(env: dict[str, str]) -> str:
-    if env.get("TUIOS_ENV") == "1":
-        return "tuios"
-    if env.get("HC_TERMINAL_ID"):
-        return "herdr"
-    return "none"
+    return "herdr" if env.get("HC_TERMINAL_ID") else "none"
 
 
-def find_author(mux: str, env: dict[str, str]) -> tuple[str, str]:
-    if mux == "tuios":
-        pane = env.get("TUIOS_PANE_ID", "")
-        return pane, pane[:8]
-    terminal = env.get("HC_TERMINAL_ID", "")
-    return terminal, terminal
-
-
-def check_codex_rule(mux: str, env: dict[str, str]) -> None:
+def check_codex_rule(env: dict[str, str]) -> None:
     codex_home = env.get("CODEX_HOME") or os.path.join(env.get("HOME", ""), ".codex")
     path = os.path.join(codex_home, "rules", "default.rules")
     try:
         lines = {line.strip() for line in read_text(path).splitlines()}
     except OSError:
         lines = set()
-    if CODEX_RULES[mux] not in lines:
-        raise DebateError(f"codex cannot reply from its sandbox: run /amoniac:setup-codex first ({path} has no {mux} rule)")
+    if CODEX_RULE not in lines:
+        raise DebateError(f"codex cannot reply from its sandbox: run /amoniac:setup-review first ({path} has no hc rule)")
 
 
 def run_command(command: list[str]) -> subprocess.CompletedProcess:
@@ -256,21 +239,14 @@ def parse_json_output(command: list[str], result: subprocess.CompletedProcess) -
         raise DebateError(describe_failure(command, result))
 
 
-def build_question(mux: str, author: str, directory: str, round_number: int, question: str | None) -> str:
-    reply = fill_template(f"debate-reply-{mux}.md", author=author, directory=directory, round=round_number)
+def build_question(author: str, directory: str, round_number: int, question: str | None) -> str:
+    reply = fill_template("debate-reply-herdr.md", author=author, directory=directory, round=round_number)
     if round_number == 1:
         question = fill_template("debate-round-1.md", prompt_file=os.path.join(directory, PROMPT_NAME))
     return f"{question} {reply}"
 
 
-def send_question(mux: str, reviewer: str, text: str) -> None:
-    if mux == "tuios":
-        command = ["tuios", "ask-agent", "-w", reviewer, "--timeout", "60000", text]
-        result = run_command(command)
-        output = (result.stdout + result.stderr).lower()
-        if result.returncode != 0 and not any(word in output for word in TUIOS_ASK_TIMEOUT):
-            raise DebateError(describe_failure(command, result))
-        return
+def send_question(reviewer: str, text: str) -> None:
     command = ["hc", "send", reviewer, text]
     result = run_command(command)
     if result.returncode != 0:
@@ -293,26 +269,30 @@ def find_free_name(base: str) -> str:
         name = f"{base}-{number}"
 
 
-def build_claude_options(directory: str, send: str) -> list[str]:
-    return [
-        "--permission-mode", "dontAsk",
-        "--allowedTools", "Read", "Glob", "Grep", f"Edit(/{directory}/**)", f"Bash({send}:*)",
-        "--add-dir", directory,
-    ]
+def template_name(agent: str) -> str:
+    return f"amoniac-review-{agent}"
 
 
-def build_codex_options(directory: str) -> list[str]:
-    profile = f'{{extends=":read-only", filesystem={{"{directory}"="write"}}}}'
-    return [
-        "-c", "approval_policy=never",
-        "-c", 'default_permissions="amoniac-review"', "-c", f"permissions.amoniac-review={profile}",
-    ]
+def installed_template_path(agent: str, env: dict[str, str]) -> str:
+    return os.path.join(env.get("HOME", ""), ".config", "herdr-core", "templates", f"{template_name(agent)}.md")
 
 
-def build_herdr_agent(agent: str, directory: str, question: str) -> list[str]:
-    if agent == "claude":
-        return ["claude", *build_claude_options(directory, "hc send"), "--", question]
-    return ["codex", "--no-daemon", *build_codex_options(directory), question]
+def compare_template(agent: str, env: dict[str, str]) -> str:
+    expected = read_text(os.path.join(TEMPLATES, f"{template_name(agent)}.md"))
+    path = installed_template_path(agent, env)
+    try:
+        installed = read_text(path)
+    except FileNotFoundError:
+        return "missing"
+    except OSError as error:
+        raise DebateError(f"cannot read {path}: {error.strerror}")
+    return "same" if installed == expected else "different"
+
+
+def check_template(agent: str, env: dict[str, str]) -> None:
+    state = compare_template(agent, env)
+    if state != "same":
+        raise DebateError(f"the herdr-core template {template_name(agent)} is {state}: run /amoniac:setup-review first ({installed_template_path(agent, env)})")
 
 
 def show_herdr_pane(address: str) -> subprocess.CompletedProcess:
@@ -336,11 +316,11 @@ def find_pane_labels(author: str) -> list[str]:
     return [option for key in PANE_LABELS for option in ("--label", f"{key}={labels[key]}")]
 
 
-def start_herdr(agent: str, author: str, author_id: str, root: str, directory: str) -> tuple[str, str, bool]:
-    name = find_free_name(f"review-{agent}-{author_id}")
+def start_reviewer(agent: str, author: str, root: str, directory: str) -> tuple[str, str, bool]:
+    name = find_free_name(f"review-{agent}-{author}")
     pane_labels = find_pane_labels(author)
-    question = build_question("herdr", author, directory, 1, None)
-    command = ["hc", "run", "--bg", "--json", "--name", name, *pane_labels, "--cwd", root, "--", *build_herdr_agent(agent, directory, question)]
+    question = build_question(author, directory, 1, None)
+    command = ["hc", "run", "--bg", "--json", "--name", name, *pane_labels, "--cwd", root, "--", template_name(agent), question]
     result = run_command(command)
     started = parse_json_output(command, result)
     if result.returncode != 0 or "address" not in started:
@@ -350,34 +330,12 @@ def start_herdr(agent: str, author: str, author_id: str, root: str, directory: s
         shown = show_herdr_pane(address)
         if shown.returncode != 0:
             print(f"debate: the reviewer runs, but herdr-app did not show its pane: {shown.stdout.strip() or shown.stderr.strip()}", file=sys.stderr)
-    return address, name, True
-
-
-def start_tuios(agent: str, author: str, author_id: str, root: str, directory: str) -> tuple[str, str, bool]:
-    name = f"review-{agent}-{author_id}"
-    if agent == "claude":
-        command = [
-            "tuios", "start-agent", "claude", "--name", name, "--cwd", root, "--grants", "read,write", "--json", "--",
-            *build_claude_options(directory, "tuios send-agent-message"),
-        ]
-    else:
-        command = [
-            "tuios", "start-agent", shlex.join(["codex", *build_codex_options(directory)]), "--protocol", "codex",
-            "--name", name, "--cwd", root, "--grants", "read,write", "--json",
-        ]
-    result = run_command(command)
-    started = parse_json_output(command, result)
-    if "window_id" not in started:
-        raise DebateError(describe_failure(command, result))
-    window = started["window_id"]
-    if result.returncode != 0:
-        return window, name, False
-    send_question("tuios", window, build_question("tuios", author, directory, 1, None))
-    return window, name, True
+    first_message = started.get("first_message") or {}
+    return address, name, bool(first_message.get("sent"))
 
 
 def parse_start(argv: list[str]) -> tuple[str, str | None, str]:
-    parser = argparse.ArgumentParser(prog="debate.py start", description="Start a review debate with one reviewer in tuios or herdr.")
+    parser = argparse.ArgumentParser(prog="debate.py start", description="Start a review debate with one reviewer in herdr.")
     parser.add_argument("subject", nargs="?", default="diff", choices=["diff", "plan"])
     parser.add_argument("names", nargs="*", metavar="FILE|AGENT", help=f"plan: the plan file first; then one agent: {', '.join(AGENTS)}")
     args = parser.parse_args(argv)
@@ -395,12 +353,12 @@ def parse_start(argv: list[str]) -> tuple[str, str | None, str]:
 
 def start(argv: list[str], env: dict[str, str]) -> int:
     subject, plan_file, agent = parse_start(argv)
-    mux = detect_mux(env)
-    if mux == "none":
-        print("debate: tuios or herdr is necessary for a debate", file=sys.stderr)
+    if detect_mux(env) == "none":
+        print("debate: herdr is necessary for a debate", file=sys.stderr)
         return MUX_MISSING
     if agent == "codex":
-        check_codex_rule(mux, env)
+        check_codex_rule(env)
+    check_template(agent, env)
     runtime_dir = env.get("XDG_RUNTIME_DIR")
     if not runtime_dir:
         raise DebateError("XDG_RUNTIME_DIR is not set")
@@ -414,18 +372,17 @@ def start(argv: list[str], env: dict[str, str]) -> int:
         print("No changes to review.")
         return 1
 
-    author, author_id = find_author(mux, env)
-    author_dir = os.path.join(runtime_dir, "amoniac", author_id)
+    author = env["HC_TERMINAL_ID"]
+    author_dir = os.path.join(runtime_dir, "amoniac", "reviews", author)
     os.makedirs(author_dir, exist_ok=True)
     directory = tempfile.mkdtemp(prefix=time.strftime("%Y%m%d-%H%M%S-"), dir=author_dir)
     with open(os.path.join(directory, PROMPT_NAME), "w", encoding="utf-8") as handle:
         handle.write(prompt)
 
-    starter = start_tuios if mux == "tuios" else start_herdr
-    reviewer, name, ready = starter(agent, author, author_id, root, directory)
+    reviewer, name, ready = start_reviewer(agent, author, root, directory)
 
     values = {"reviewer": reviewer, "name": name, "author": author, "directory": directory, "script": SCRIPT}
-    wait = fill_template(f"debate-wait-{mux}.md", **values)
+    wait = fill_template("debate-wait-herdr.md", **values)
     instructions = fill_template("debate-author.md", wait=wait, **values)
     if not ready:
         instructions = fill_template("debate-start-blocked.md", **values) + "\n\n" + instructions
@@ -439,16 +396,14 @@ def ask(argv: list[str], env: dict[str, str]) -> int:
     parser.add_argument("directory")
     parser.add_argument("round", type=int)
     args = parser.parse_args(argv)
-    mux = detect_mux(env)
-    if mux == "none":
-        raise DebateError("tuios or herdr is necessary for a debate")
+    if detect_mux(env) == "none":
+        raise DebateError("herdr is necessary for a debate")
     question = None
     if args.round > 1:
         question = sys.stdin.read().strip()
         if not question:
             raise DebateError("no question on stdin")
-    author, _ = find_author(mux, env)
-    send_question(mux, args.reviewer, build_question(mux, author, args.directory, args.round, question))
+    send_question(args.reviewer, build_question(env["HC_TERMINAL_ID"], args.directory, args.round, question))
     print(f"Round {args.round} sent to {args.reviewer}.")
     return 0
 
@@ -469,20 +424,25 @@ def print_answer(argv: list[str], env: dict[str, str]) -> int:
 
 
 def print_codex_rules(argv: list[str], env: dict[str, str]) -> int:
-    mux = detect_mux(env)
-    if mux == "none":
-        print("debate: tuios or herdr is necessary for a debate", file=sys.stderr)
+    if detect_mux(env) == "none":
+        print("debate: herdr is necessary for a debate", file=sys.stderr)
         return MUX_MISSING
-    tool = MUX_TOOLS[mux]
-    path = shutil.which(tool, path=env.get("PATH"))
+    path = shutil.which("hc", path=env.get("PATH"))
     if path is None:
-        raise DebateError(f"{tool} is not on PATH")
-    print(f'host_executable(name="{tool}", paths=["{path}"])')
-    print(CODEX_RULES[mux])
+        raise DebateError("hc is not on PATH")
+    print(f'host_executable(name="hc", paths=["{path}"])')
+    print(CODEX_RULE)
     return 0
 
 
-COMMANDS = {"start": start, "ask": ask, "answer": print_answer, "codex-rules": print_codex_rules}
+def print_templates(argv: list[str], env: dict[str, str]) -> int:
+    for agent in AGENTS:
+        print(f"=== {installed_template_path(agent, env)} ({compare_template(agent, env)})")
+        print(read_text(os.path.join(TEMPLATES, f"{template_name(agent)}.md")), end="")
+    return 0
+
+
+COMMANDS = {"start": start, "ask": ask, "answer": print_answer, "codex-rules": print_codex_rules, "templates": print_templates}
 
 
 def main(argv: list[str]) -> int:
@@ -492,7 +452,7 @@ def main(argv: list[str]) -> int:
         return 0
     command = COMMANDS.get(argv[0]) if argv else None
     if command is None:
-        print("usage: debate.py env | codex-rules | start [diff | plan FILE] AGENT | ask REVIEWER DIRECTORY ROUND < question | answer DIRECTORY ROUND", file=sys.stderr)
+        print("usage: debate.py env | codex-rules | templates | start [diff | plan FILE] AGENT | ask REVIEWER DIRECTORY ROUND < question | answer DIRECTORY ROUND", file=sys.stderr)
         return 2
     try:
         return command(argv[1:], env)

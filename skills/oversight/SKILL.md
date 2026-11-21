@@ -160,10 +160,10 @@ Show the list of iterations and their status. Then ask:
   Run /amoniac:plan for this scope.
   ```
 
-  Start the `amoniac:spawn-session` skill with the Skill tool, and give the prompt as its argument. That skill asks about the CLI and the model, gives a name to the session and starts it in tuios, herdr, tmux or kitty. Do not ask these questions in this skill.
+  Start the `amoniac:spawn-session` skill with the Skill tool, and give the prompt as its argument. That skill asks about the CLI and the model, gives a name to the session and starts it in herdr, tmux or kitty. Do not ask these questions in this skill.
 
   - If `spawn-session` starts the session, add a line to the progress log: the date and the name of the iteration.
-  - If `spawn-session` tells that tuios, herdr, tmux and kitty are not available, show the full prompt in a code block. Tell the user in one line to paste it into a new session. Add a line to the progress log: the date, the name of the iteration and "prompt given for manual start".
+  - If `spawn-session` tells that herdr, tmux and kitty are not available, show the full prompt in a code block. Tell the user in one line to paste it into a new session. Add a line to the progress log: the date, the name of the iteration and "prompt given for manual start".
 
   Then go back to Step 5. The status stays `not started` until the user tells that the iteration is done. This session never plans the iteration itself. That puts the detail of one iteration into the session of the epic.
 

@@ -9,7 +9,7 @@ Each skill uses the [Agent Skills](https://agentskills.io/specification) layout:
 - `brainstorm` — turn an idea into a design through one-at-a-time questions (for now a copy of [parMaster/claude-dlc brainstorm](https://github.com/parMaster/claude-dlc/tree/main/plugins/brainstorm), MIT)
 - `plan` — intent-level plan in `docs/plans/`: loads the project's skills first, asks whether a migration is needed, never picks the more complex option without asking, checks new names, written in ASD-STE100
 - `/amoniac:complete-plan` — for a finished plan or WBS document, writes only its title, Goal and Decisions to `docs/plans/completed/` (`skills/complete-plan/scripts/complete_plan.py`). It refuses a plan with open boxes unless `--force`. You delete the plan yourself
-- `review-plan` — one debate about a plan through `/amoniac:review`, then applies the findings that hold up
+- `review-plan` — finds the plan and runs the full `/amoniac:review` cycle on it
 - `backlog` — deferred work in `docs/backlog/`, one file per item, with a `worth: yes | later | no` triage
 - `oversight` — scope, Definition of Done and iterations of a multi-plan epic in `docs/plans/wbs-<slug>.md`; starts each iteration with `spawn-session`
 
@@ -19,19 +19,28 @@ Each skill uses the [Agent Skills](https://agentskills.io/specification) layout:
 - `naming` — how to name files, classes, errors, methods and internal methods
 - `testing` — test levels, real dependencies, when mocks are allowed, isolation, no sleep, structure
 - `go-best-practices` — best practices for writing Go code
-- `spawn-session` — hand a task off to a new `claude` or `codex` session in a new tuios window, herdr terminal, tmux window or kitty tab (adapted from [parMaster/claude-dlc spawn-session](https://github.com/parMaster/claude-dlc/tree/main/plugins/agterm/skills/spawn-session), MIT)
+- `spawn-session` — hand a task off to a new `claude` or `codex` session in a new herdr terminal, tmux window or kitty tab (adapted from [parMaster/claude-dlc spawn-session](https://github.com/parMaster/claude-dlc/tree/main/plugins/agterm/skills/spawn-session), MIT)
 
-## Review: a debate in tuios or herdr
+## Review in herdr
 
 ```
-/amoniac:review                          the diff; asks for the reviewer
-/amoniac:review diff codex
-/amoniac:review plan docs/plans/x.md claude
+/amoniac:review                          the diff; two reviewers
+/amoniac:review diff codex               the diff; only codex
+/amoniac:review plan docs/plans/x.md     a plan; two reviewers
 ```
 
-Inside a [tuios](https://tuios.dev) pane (0.12.1 or newer) or a [herdr](https://herdr.dev) terminal, `/amoniac:review` starts one reviewer, `claude` or `codex`, in a new pane beside you. With no agent in the arguments, it asks: the other agent (recommended) or the agent of this session. This session sends the reviewer the review prompt, checks each finding in the code, and argues about each wrong finding, 3 rounds at most. Then you get the accepted, dropped and disputed findings, and decide the disputed ones. Outside tuios and herdr, `/amoniac:review` stops: a review without a debate is not available.
+Inside a [herdr](https://herdr.dev) terminal, `/amoniac:review` runs a cycle for each reviewer, in a new pane beside you:
 
-`skills/review/scripts/debate.py start` builds the prompt, checks the conditions, starts the reviewer, sends round 1 and prints the steps for this session. The texts are in `skills/review/assets/`: `debate-*.md`, `diff-review.md` and the plan checklist `plan-review.md`. `debate.py ask` sends rounds 2 and 3.
+```
+reviewer 1 = the other agent ─► debate (rounds 1–3) ─► you approve findings
+              ─► this session fixes ─► the same reviewer checks the fix (round 4)
+              ─► fixed: next │ not fixed: blocked, you decide
+reviewer 2 = the agent of this session ─► the same cycle on the fixed code
+```
+
+With an agent in the arguments, only that agent reviews. Nothing is fixed before you approve it. Outside herdr, `/amoniac:review` stops.
+
+`skills/review/scripts/debate.py start` builds the prompt, checks the conditions, starts the reviewer from its herdr-core template, sends round 1 and prints the steps for this session. The texts are in `skills/review/assets/`: `debate-*.md`, `diff-review.md`, the plan checklist `plan-review.md` and the templates in `templates/`. `debate.py ask` sends rounds 2 to 4.
 
 The prompt carries the rules, so a reviewer that cannot load skills still gets them:
 
@@ -47,17 +56,19 @@ The prompt carries the rules, so a reviewer that cannot load skills still gets t
 }
 ```
 
-`/amoniac:review-plan` runs the same debate on a plan, then applies the findings.
+`/amoniac:review-plan` finds the plan and runs the same cycle on it.
 
-- The reviewer writes each answer to a file in the debate directory. It can write only in that directory: `claude` through `Edit(...)` in `--allowedTools`, `codex` through a read-only permission profile with one writable directory.
-- Then it sends a notice: tuios mail `done` with the subject `review-N` in tuios, `review-N done` with `hc send` in herdr.
+- Each reviewer starts from a herdr-core template in `~/.config/herdr-core/templates/`: `amoniac-review-claude` or `amoniac-review-codex`.
+- The reviewer writes each answer to a file. It can write only in `$XDG_RUNTIME_DIR/amoniac/reviews`: `claude` through `Edit(...)` in `--allowedTools`, `codex` through a read-only permission profile with that one writable folder.
+- Then it sends the notice `review-N done` with `hc send`.
 - Both run with no permission prompts: `claude` with `--permission-mode dontAsk`, `codex` with `approval_policy=never`. A forbidden action is refused, not asked.
-- The prompt and the answers are in `$XDG_RUNTIME_DIR/amoniac/<author>/<debate>/`, not in the repository.
-- The reviewer pane stays open after the debate. In herdr, it closes when your session ends.
+- The prompt and the answers are in `$XDG_RUNTIME_DIR/amoniac/reviews/<author>/<debate>/`, not in the repository.
+- The reviewer pane stays open after the cycle. It closes when your session ends.
 
-`codex` needs one setup step: `/amoniac:setup-codex` adds a rule to `~/.codex/rules/default.rules` that lets only `tuios send-agent-message`, or `hc send` in herdr, run outside its sandbox. It asks before it writes. In herdr, `hc send` can type into each of your terminals.
+Run `/amoniac:setup-review` once. It installs the two templates, and adds a rule to `~/.codex/rules/default.rules` that lets only `hc send` run outside the codex sandbox. It asks before each write. `hc send` can type into each of your terminals. `/amoniac:review` refuses to start when a template is missing or old, and names `setup-review`.
 
 In herdr, start codex with `codex --no-daemon`. Without the flag, codex runs commands through its background server, which keeps the environment of the terminal it started in. Then `HC_TERMINAL_ID` is missing, and `/amoniac:review` and `spawn-session` cannot find the terminal of this session.
+
 ## Hooks (PreToolUse)
 
 - `block-comments.py` — blocks Write/Edit that add new code comments (override: `CLAUDE_ALLOW_COMMENTS=1`)
@@ -66,7 +77,7 @@ In herdr, start codex with `codex --no-daemon`. Without the flag, codex runs com
 - `block-file-writes.py` — blocks file writes from Bash (`sed -i`, `>`, `tee`, heredocs…) outside `/tmp`, and every `eval`. Text in quotes is not taken for a redirect; the code after `sh -c` / `bash -lc` is checked as a command
 - `block-output-filters.py` — blocks a pipe that filters command output with `sed`, `awk` or `perl`, or with two or more filters (`grep`, `head`, `tail`, `sort`, `jq`…), and any filter after `gh`, `curl`, `wget` or `npm view`. The agent saves the output to a file in the scratchpad and searches it with Grep or Read. One filter after a local command (`make test 2>&1 | tail -30`) passes
 - `go-lookups.py` — blocks Bash, Read and Grep that touch the Go module cache (`pkg/mod`) and `go doc … | grep`; library APIs are read with `go doc <pkg>` and `go doc <pkg>.<Symbol>` (after `go get` when the module is not a dependency yet) or through the LSP tool (gopls). When grep/rg targets Go files, reminds that LSP definition/references are exact for symbols (does not block)
-- `allow-debate-commands.py` — lets the review debate run without a permission prompt in each round. It allows only `skills/review/scripts/debate.py` of this plugin, with its absolute path (`env`, `start`, `answer`, and `ask` with one quoted heredoc), `hc wait --children any --json --timeout N` and `hc read ADDRESS [--lines N]` in herdr; `tuios wait-for agent-message`, `tuios read-agent-messages --unread --json`, `tuios list-agents --json` and `tuios peek-prompt` in tuios. It never denies: a command in another shape gets the normal permission flow, and a deny from another hook wins
+- `allow-debate-commands.py` — lets the review debate run without a permission prompt in each round. It allows only `skills/review/scripts/debate.py` of this plugin, with its absolute path (`env`, `start`, `answer`, and `ask` with one quoted heredoc), `hc wait --children any --json --timeout N` and `hc read ADDRESS [--lines N]`. It never denies: a command in another shape gets the normal permission flow, and a deny from another hook wins
 - `remind-skills.py` — when a Write/Edit to a code file adds new files, names, abstractions or tests, reminds the agent to load `naming`, `principles` or `testing` (does not block)
 - `required-skills.py` — at session start tells the agent which skills the project requires. Skills under `always` block every tool except `Skill` until they are loaded; skills under `files` block Write/Edit of a file matching the glob until they are loaded. Loads are recorded from the `Skill` tool (PostToolUse) and from typed `/name` commands (UserPromptExpansion). The project lists them in `.agents/required-skills.json`:
 

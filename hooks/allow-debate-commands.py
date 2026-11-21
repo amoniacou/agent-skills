@@ -14,9 +14,6 @@ ANSWER = re.compile(rf"answer {DIRECTORY} [0-9]+")
 ASK = re.compile(rf"ask {ADDRESS} {DIRECTORY} [0-9]+ <<'([A-Za-z_][A-Za-z0-9_]*)'")
 HC_WAIT = re.compile(r"hc wait --children any --json --timeout [0-9]+")
 HC_READ = re.compile(rf"hc read {ADDRESS}(?: --lines [0-9]+)?")
-TUIOS_WAIT = re.compile(rf"tuios wait-for agent-message -w {ADDRESS} --timeout [0-9]+")
-TUIOS_READ = re.compile(rf"tuios read-agent-messages -w {ADDRESS} --unread --json")
-TUIOS_STATE = re.compile(rf"tuios list-agents --json|tuios peek-prompt -w {ADDRESS}")
 
 
 def strip_script(command: str, root: str) -> str | None:
@@ -59,12 +56,10 @@ def main() -> None:
     rest = strip_script(command, root)
     if rest is not None and is_debate_command(rest):
         decide("allow", "amoniac review debate: a command of the debate script")
-    if HC_WAIT.fullmatch(command) or TUIOS_WAIT.fullmatch(command):
+    if HC_WAIT.fullmatch(command):
         decide("allow", "amoniac review debate: wait for the reviewer")
-    if HC_READ.fullmatch(command) or TUIOS_STATE.fullmatch(command):
+    if HC_READ.fullmatch(command):
         decide("allow", "amoniac review debate: read the reviewer screen")
-    if TUIOS_READ.fullmatch(command):
-        decide("allow", "amoniac review debate: read the reviewer answer")
     sys.exit(0)
 
 

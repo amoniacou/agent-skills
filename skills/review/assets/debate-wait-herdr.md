@@ -12,6 +12,7 @@ The reviewer writes the answer of round N to a file in `{{directory}}`. Then it 
    |---|---|
    | the notice of round N from `{{reviewer}}` | print the answer with `python3 "{{script}}" answer {{directory}} N` |
    | `reason: timeout` | wait again |
+   | news of a different child, for example the reviewer of an earlier cycle | wait again |
    | `{{reviewer}}` is `blocked` | run `hc read {{reviewer}}`; tell the user what the reviewer waits on; the user answers in the pane; wait again |
    | `{{reviewer}}` has `error`, or it exited | run `hc read {{reviewer}} --lines 50`; tell the user that round N failed; stop the debate |
    | `{{reviewer}}` is `done` or `idle`, with no notice | run the `answer` command; on exit 0, use the answer; on exit 1, if its `turn` is 0, wait again; else run `hc read {{reviewer}} --lines 50`, tell the user, and stop |

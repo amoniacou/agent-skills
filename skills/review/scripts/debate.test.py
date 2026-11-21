@@ -1,7 +1,6 @@
 import json
 import os
 import pathlib
-import shlex
 import subprocess
 import tempfile
 
@@ -35,7 +34,8 @@ if name == "hc" and args[0] == "run":
     if (fake / "hc.fail").exists():
         sys.stderr.write("no core\\n")
         sys.exit(5)
-    print(json.dumps({"address": "t99", "state": "live"}))
+    sent = not (fake / "hc.not-sent").exists()
+    print(json.dumps({"address": "t99", "state": "live", "first_message": {"sent": sent}}))
 if name == "herdr-app":
     misses_file = fake / "herdr-app.misses"
     misses = int(misses_file.read_text()) if misses_file.exists() else 0
@@ -44,16 +44,9 @@ if name == "herdr-app":
         print(json.dumps({"error": "no running terminal"}))
         sys.exit(1)
     print(json.dumps({"pending": True}))
-if name == "tuios" and args[0] == "start-agent":
-    print(json.dumps({"window_id": "w1"}))
-    if (fake / "tuios.not-ready").exists():
-        sys.exit(1)
-if name == "tuios" and args[0] == "ask-agent" and (fake / "tuios.ask-error").exists():
-    sys.stderr.write((fake / "tuios.ask-error").read_text())
-    sys.exit(1)
 """
 
-TUIOS_RULE = 'prefix_rule(pattern=["tuios", "send-agent-message"], decision="allow")'
+OTHER_RULE = 'prefix_rule(pattern=["git", "status"], decision="allow")'
 HC_RULE = 'prefix_rule(pattern=["hc", "send"], decision="allow")'
 
 failures = 0
@@ -97,20 +90,34 @@ with tempfile.TemporaryDirectory() as base:
     fake_dir = os.path.join(base, "fake")
     runtime_dir = os.path.join(base, "run")
     codex_home = os.path.join(base, "codex")
+    home = os.path.join(base, "home")
+    installed_templates = os.path.join(home, ".config", "herdr-core", "templates")
+    shipped_templates = os.path.join(os.path.dirname(os.path.dirname(SCRIPT)), "assets", "templates")
     os.makedirs(fake_dir)
     os.makedirs(runtime_dir)
-    for tool in ("hc", "herdr-app", "tuios"):
+    for tool in ("hc", "herdr-app"):
         write_file(bin_dir, tool, FAKE_TOOL)
         os.chmod(os.path.join(bin_dir, tool), 0o755)
-    clean_env = {key: value for key, value in os.environ.items() if key not in ("TUIOS_ENV", "TUIOS_PANE_ID", "HC_TERMINAL_ID")}
-    base_env = {**clean_env, "FAKE_DIR": fake_dir, "PATH": bin_dir + os.pathsep + os.environ["PATH"], "XDG_RUNTIME_DIR": runtime_dir, "CODEX_HOME": codex_home}
+    clean_env = {key: value for key, value in os.environ.items() if key != "HC_TERMINAL_ID"}
+    base_env = {**clean_env, "FAKE_DIR": fake_dir, "PATH": bin_dir + os.pathsep + os.environ["PATH"], "XDG_RUNTIME_DIR": runtime_dir, "CODEX_HOME": codex_home, "HOME": home}
     herdr_env = {**base_env, "HC_TERMINAL_ID": "t7"}
-    tuios_env = {**base_env, "TUIOS_ENV": "1", "TUIOS_PANE_ID": "abcdef1234567890"}
     repository = create_repository(base)
     seen_directories = set()
 
-    def reset_fakes(rules=(), taken=(), finished=(), fail=False, not_ready=False, pane_misses=0, get_error=False, ask_error=None, no_labels=False):
-        for name in ("calls.jsonl", "hc.taken", "hc.finished", "hc.fail", "hc.get-error", "hc.no-labels", "tuios.not-ready", "tuios.ask-error", "herdr-app.misses"):
+    def install_templates(states):
+        for agent, state in states.items():
+            name = f"amoniac-review-{agent}.md"
+            target = os.path.join(installed_templates, name)
+            if state == "missing":
+                if os.path.exists(target):
+                    os.remove(target)
+                continue
+            text = pathlib.Path(shipped_templates, name).read_text()
+            write_file(installed_templates, name, text if state == "same" else text + "old line\n")
+
+    def reset_fakes(rules=(), taken=(), finished=(), fail=False, pane_misses=0, get_error=False, no_labels=False, not_sent=False, templates=None):
+        install_templates(templates or {"claude": "same", "codex": "same"})
+        for name in ("calls.jsonl", "hc.taken", "hc.finished", "hc.fail", "hc.get-error", "hc.no-labels", "hc.not-sent", "herdr-app.misses"):
             path = os.path.join(fake_dir, name)
             if os.path.exists(path):
                 os.remove(path)
@@ -120,16 +127,14 @@ with tempfile.TemporaryDirectory() as base:
             write_file(fake_dir, "hc.finished", "\n".join(finished))
         if fail:
             write_file(fake_dir, "hc.fail", "")
-        if not_ready:
-            write_file(fake_dir, "tuios.not-ready", "")
         if pane_misses:
             write_file(fake_dir, "herdr-app.misses", str(pane_misses))
         if get_error:
             write_file(fake_dir, "hc.get-error", "")
-        if ask_error:
-            write_file(fake_dir, "tuios.ask-error", ask_error)
         if no_labels:
             write_file(fake_dir, "hc.no-labels", "")
+        if not_sent:
+            write_file(fake_dir, "hc.not-sent", "")
         write_file(codex_home, "rules/default.rules", "\n".join(rules) + "\n")
 
     def read_calls():
@@ -143,7 +148,7 @@ with tempfile.TemporaryDirectory() as base:
         return next((call for call in calls if call[:len(prefix)] == list(prefix)), None)
 
     def find_new_directories(author_id):
-        parent = os.path.join(runtime_dir, "amoniac", author_id)
+        parent = os.path.join(runtime_dir, "amoniac", "reviews", author_id)
         found = {os.path.join(parent, name) for name in os.listdir(parent)} if os.path.isdir(parent) else set()
         new = found - seen_directories
         seen_directories.update(found)
@@ -155,16 +160,13 @@ with tempfile.TemporaryDirectory() as base:
     for label, env, expected in [
         ("env: none", base_env, "none"),
         ("env: herdr", herdr_env, "herdr"),
-        ("env: tuios", tuios_env, "tuios"),
-        ("env: tuios inside herdr", {**tuios_env, "HC_TERMINAL_ID": "t7"}, "tuios"),
+        ("env: tuios variables without herdr", {**base_env, "TUIOS_ENV": "1", "TUIOS_PANE_ID": "abcdef12"}, "none"),
     ]:
         check(label, run(["env"], env).stdout.strip(), expected)
 
     result = run(["codex-rules"], herdr_env)
     check("codex rules in herdr", result.stdout.splitlines(), [f'host_executable(name="hc", paths=["{os.path.join(bin_dir, "hc")}"])', HC_RULE])
-    result = run(["codex-rules"], tuios_env)
-    check("codex rules in tuios", result.stdout.splitlines(), [f'host_executable(name="tuios", paths=["{os.path.join(bin_dir, "tuios")}"])', TUIOS_RULE])
-    check("codex rules without a mux: exit 3", run(["codex-rules"], base_env).returncode, 3)
+    check("codex rules without herdr: exit 3", run(["codex-rules"], base_env).returncode, 3)
 
     reset_fakes()
     result = run(["start", "diff", "claude"], base_env)
@@ -182,10 +184,10 @@ with tempfile.TemporaryDirectory() as base:
         check(f"{label}: tells one reviewer", "exactly one reviewer" in result.stderr, True)
         check(f"{label}: no tool runs", read_calls(), [])
 
-    reset_fakes(rules=[TUIOS_RULE])
+    reset_fakes(rules=[OTHER_RULE])
     result = run(["start", "diff", "codex"], herdr_env)
     check("codex without the hc rule: exit 2", result.returncode, 2)
-    check("codex without the hc rule: tells setup-codex", "/amoniac:setup-codex" in result.stderr, True)
+    check("codex without the hc rule: tells setup-review", "/amoniac:setup-review" in result.stderr, True)
     check("codex without the hc rule: no tool runs", read_calls(), [])
 
     reset_fakes()
@@ -229,8 +231,9 @@ with tempfile.TemporaryDirectory() as base:
     check("unchanged ruby file adds no ruby rules", '<rules name="ruby">' in sent, False)
     check("no chart: no helmcheck", '<rules name="amoniac:helmcheck">' in sent, False)
     check("skill frontmatter stripped", "when_to_use:" in sent, False)
-    check("tracked change in diff", "+func Run() {}" in sent, True)
-    check("untracked file in diff", "+print(1)" in sent, True)
+    check("tracked files in the git diff command", "git diff HEAD -- main.go main_test.go\n" in sent, True)
+    check("untracked file listed as new", "Read each file fully:\n\n- tools/gen.py" in sent, True)
+    check("diff text not in the prompt", ("+func Run() {}" in sent, "+print(1)" in sent), (False, False))
     check("vendor excluded", "vendor/lib/lib.go" in sent, False)
     check("lock file excluded", "go.lock" in sent, False)
     check("changed files listed", "- tools/gen.py" in sent, True)
@@ -281,7 +284,7 @@ with tempfile.TemporaryDirectory() as base:
     write_file(unicode_names, "тест.py", "print(2)\n")
     result, sent = start_prompt(unicode_names, "diff")
     check("non-ascii names: debate starts", result.returncode, 0)
-    check("non-ascii names: tracked and untracked changes in diff", ("+b" in sent, "+print(2)" in sent), (True, True))
+    check("non-ascii names: quoted in the git diff command, new file listed", ("git diff HEAD -- 'конфіг.txt'\n" in sent, "- тест.py" in sent), (True, True))
     check("non-ascii names: listed as plain paths", ("- конфіг.txt" in sent, "- тест.py" in sent), (True, True))
 
     reset_fakes()
@@ -292,7 +295,7 @@ with tempfile.TemporaryDirectory() as base:
     check("herdr claude: one new directory under the author", len(directories), 1)
     directory = directories[0]
     prompt_file = os.path.join(directory, "review-prompt.md")
-    check("herdr claude: prompt has the diff", "func main()" in pathlib.Path(prompt_file).read_text(), True)
+    check("herdr claude: prompt has the git diff command", "git diff HEAD --" in pathlib.Path(prompt_file).read_text(), True)
     started = find_call(calls, "hc", "run")
     agent = started[started.index("--") + 1:]
     check(
@@ -300,9 +303,8 @@ with tempfile.TemporaryDirectory() as base:
         started[:started.index("--")],
         ["hc", "run", "--bg", "--json", "--name", "review-claude-t7", "--label", "herdr.space=sp1", "--label", "herdr.tab=tb1", "--cwd", os.path.realpath(repository)],
     )
-    check("herdr claude: writes only in the directory", f"Edit(/{directory}/**)" in agent, True)
-    check("herdr claude: may send the notice", "Bash(hc send:*)" in agent, True)
-    check("herdr claude: no permission prompts", agent[1:3], ["--permission-mode", "dontAsk"])
+    check("herdr claude: directory in the reviews folder", directory.startswith(os.path.join(runtime_dir, "amoniac", "reviews", "t7") + os.sep), True)
+    check("herdr claude: runs the template with round 1 as its task", (agent[0], len(agent)), ("amoniac-review-claude", 2))
     check("herdr claude: round 1 names the prompt", agent[-1].startswith(f"Read the file {prompt_file} and do the review"), True)
     check("herdr claude: round 1 asks for the answer file", f"{directory}/review-1.md" in agent[-1], True)
     check("herdr claude: round 1 asks for the notice", agent[-1].endswith("hc send t7 'review-1 done'"), True)
@@ -310,8 +312,10 @@ with tempfile.TemporaryDirectory() as base:
     check("herdr claude: instructions have no placeholder", "{{" in result.stdout, False)
     check("herdr claude: instructions name the reviewer", "# Debate with review-claude-t7" in result.stdout and "hc read t99" in result.stdout, True)
     check("herdr claude: instructions give the ask command", f'debate.py" ask t99 {directory} N' in result.stdout, True)
-    check("herdr claude: instructions keep the rounds and summary", "Stop after round 3" in result.stdout and "**Disputed:**" in result.stdout, True)
-    check("herdr claude: no tuios steps", "tuios" in result.stdout, False)
+    check("herdr claude: instructions keep the rounds and summary", "Stop the debate after round 3" in result.stdout and "**Disputed:**" in result.stdout, True)
+    check("herdr claude: instructions ask the user to approve before the fix", "## Step 3: The user approves the findings" in result.stdout, True)
+    check("herdr claude: instructions send the fix check as round 4", f'debate.py" ask t99 {directory} 4' in result.stdout, True)
+    check("herdr claude: instructions mark a failed fix check as blocked", "this reviewer is **blocked**" in result.stdout, True)
     run_herdr_instructions = result.stdout
 
     reset_fakes(rules=[HC_RULE], taken=["review-codex-t7"])
@@ -322,13 +326,40 @@ with tempfile.TemporaryDirectory() as base:
     check("herdr codex: exit 0", result.returncode, 0)
     check("herdr codex: free name", started[started.index("--name") + 1], "review-codex-t7-2")
     check("herdr codex: new directory", codex_directory != directory, True)
-    check("herdr codex: no daemon", agent[:2], ["codex", "--no-daemon"])
-    check(
-        "herdr codex: read-only profile with one writable directory",
-        f'permissions.amoniac-review={{extends=":read-only", filesystem={{"{codex_directory}"="write"}}}}' in agent,
-        True,
-    )
-    check("herdr codex: profile selected", 'default_permissions="amoniac-review"' in agent, True)
+    check("herdr codex: runs the codex template", agent[0], "amoniac-review-codex")
+
+    for label, rules, templates, agent_name, expected in [
+        ("claude template missing", [], {"claude": "missing", "codex": "same"}, "claude", "amoniac-review-claude is missing"),
+        ("claude template changed", [], {"claude": "different", "codex": "same"}, "claude", "amoniac-review-claude is different"),
+        ("codex template missing", [HC_RULE], {"claude": "same", "codex": "missing"}, "codex", "amoniac-review-codex is missing"),
+    ]:
+        reset_fakes(rules=rules, templates=templates)
+        result = run(["start", "diff", agent_name], herdr_env)
+        check(f"{label}: exit 2", result.returncode, 2)
+        check(f"{label}: tells the state and the setup", expected in result.stderr and "/amoniac:setup-review" in result.stderr, True)
+        check(f"{label}: no reviewer starts", find_call(read_calls(), "hc", "run"), None)
+
+    reset_fakes(rules=[HC_RULE], templates={"claude": "missing", "codex": "same"})
+    result = run(["start", "diff", "codex"], herdr_env)
+    find_new_directories("t7")
+    check("missing claude template does not stop a codex review", (result.returncode, find_call(read_calls(), "hc", "run") is not None), (0, True))
+
+    reset_fakes(templates={"claude": "same", "codex": "different"})
+    result = run(["templates"], herdr_env)
+    lines = result.stdout.splitlines()
+    check("templates: exit 0", result.returncode, 0)
+    check("templates: the state of each installed file", [line for line in lines if line.startswith("=== ")], [
+        f"=== {installed_templates}/amoniac-review-claude.md (same)",
+        f"=== {installed_templates}/amoniac-review-codex.md (different)",
+    ])
+    check("templates: the shipped text of each file", result.stdout.count("name: amoniac-review-"), 2)
+
+    reset_fakes(not_sent=True)
+    result = run(["start", "diff", "claude"], herdr_env)
+    blocked_directory = find_new_directories("t7")[0]
+    check("first message not sent: exit 4", result.returncode, 4)
+    check("first message not sent: instructions start with step 0", result.stdout.startswith("## Step 0: Send round 1 after the user"), True)
+    check("first message not sent: step 0 sends round 1 later", f'debate.py" ask t99 {blocked_directory} 1' in result.stdout, True)
 
     reset_fakes(finished=["review-claude-t7"])
     result = run(["start", "diff", "claude"], herdr_env)
@@ -362,48 +393,10 @@ with tempfile.TemporaryDirectory() as base:
     check("hc run fails: shows the error", "no core" in result.stderr, True)
 
     reset_fakes()
-    result = run(["start", "diff", "claude"], tuios_env)
-    calls = read_calls()
-    tuios_directory = find_new_directories("abcdef12")[0]
-    check("tuios claude: exit 0", result.returncode, 0)
-    check("tuios claude: name with 8 characters of the pane", find_call(calls, "tuios", "start-agent")[4], "review-claude-abcdef12")
-    asked = find_call(calls, "tuios", "ask-agent")
-    check("tuios claude: round 1 asked in the window", asked[:5], ["tuios", "ask-agent", "-w", "w1", "--timeout"])
-    check("tuios claude: round 1 names the prompt", os.path.join(tuios_directory, "review-prompt.md") in asked[-1], True)
-    check("tuios claude: round 1 notice by mail to the full pane", "tuios send-agent-message -w abcdef1234567890 --subject review-1 'done'" in asked[-1], True)
-    check("tuios claude: round 1 answer goes to a file", f"{tuios_directory}/review-1.md" in asked[-1], True)
-    check("tuios claude: may edit only the debate directory", f"Edit(/{tuios_directory}/**)" in find_call(calls, "tuios", "start-agent"), True)
-    check("tuios claude: instructions print the answer", f"answer {tuios_directory} N" in result.stdout, True)
-    check("tuios claude: no herdr calls", find_call(calls, "hc", "run"), None)
-    check("tuios claude: instructions wait for mail of the full pane", "tuios wait-for agent-message -w abcdef1234567890" in result.stdout, True)
-    check("tuios claude: instructions use the window", "`from` equal to `w1`" in result.stdout, True)
-    check("tuios claude: no herdr steps", "hc wait" in result.stdout, False)
-    check("tuios claude: instructions have no placeholder", "{{" in result.stdout, False)
-
-    reset_fakes(rules=[TUIOS_RULE])
-    result = run(["start", "diff", "codex"], tuios_env)
-    codex_directory = find_new_directories("abcdef12")[0]
-    started = find_call(read_calls(), "tuios", "start-agent")
-    check("tuios codex: exit 0", result.returncode, 0)
-    check("tuios codex: codex protocol", started[3:5], ["--protocol", "codex"])
-    check("tuios codex: sandbox writes only the debate directory", shlex.split(started[2]), [
-        "codex", "-c", "approval_policy=never", "-c", 'default_permissions="amoniac-review"',
-        "-c", f'permissions.amoniac-review={{extends=":read-only", filesystem={{"{codex_directory}"="write"}}}}',
-    ])
-
-    reset_fakes(not_ready=True)
-    result = run(["start", "diff", "claude"], tuios_env)
-    blocked_directory = find_new_directories("abcdef12")[0]
-    check("tuios not ready: exit 4", result.returncode, 4)
-    check("tuios not ready: round 1 not sent", find_call(read_calls(), "tuios", "ask-agent"), None)
-    check("tuios not ready: instructions start with step 0", result.stdout.startswith("## Step 0: Send round 1 after the user"), True)
-    check("tuios not ready: step 0 sends round 1 later", f'debate.py" ask w1 {blocked_directory} 1' in result.stdout, True)
-
-    reset_fakes()
-    result = run(["ask", "w1", blocked_directory, "1"], tuios_env)
-    asked = find_call(read_calls(), "tuios", "ask-agent")
+    result = run(["ask", "t99", directory, "1"], herdr_env)
+    sent = find_call(read_calls(), "hc", "send")
     check("ask round 1: exit 0", result.returncode, 0)
-    check("ask round 1: sends the review question", asked[-1].startswith(f"Read the file {blocked_directory}/review-prompt.md"), True)
+    check("ask round 1: sends the review question", sent[3].startswith(f"Read the file {directory}/review-prompt.md"), True)
 
     question = "Round 2. Finding 1 is wrong: `parse()` doesn't read the user's file, and $HOME stays."
     reset_fakes()
@@ -415,31 +408,14 @@ with tempfile.TemporaryDirectory() as base:
     check("herdr ask: round 2 answer file", "/run/x/d1/review-2.md" in sent[3], True)
     check("herdr ask: round 2 notice", sent[3].endswith("hc send t7 'review-2 done'"), True)
 
-    reset_fakes()
-    result = run(["ask", "w1", "/run/x/d1", "3"], tuios_env, stdin=question)
-    asked = find_call(read_calls(), "tuios", "ask-agent")
-    check("tuios ask: exit 0", result.returncode, 0)
-    check("tuios ask: typed in the window", asked[:4], ["tuios", "ask-agent", "-w", "w1"])
-    check("tuios ask: round 3 mail", asked[-1].startswith(question + " ") and "--subject review-3" in asked[-1], True)
-
-    write_file(blocked_directory, "review-2.md", "KEEP 1: it's right.\n")
-    result = run(["answer", blocked_directory, "2"], herdr_env)
+    write_file(directory, "review-2.md", "KEEP 1: it's right.\n")
+    result = run(["answer", directory, "2"], herdr_env)
     check("answer: exit 0", result.returncode, 0)
     check("answer: prints the file", result.stdout, "KEEP 1: it's right.\n\n")
-    result = run(["answer", blocked_directory, "3"], herdr_env)
+    result = run(["answer", directory, "3"], herdr_env)
     check("answer not written yet: exit 1", result.returncode, 1)
     check("answer not written yet: says so", "no answer file" in result.stderr, True)
     check("herdr instructions print the answer with the script", f'debate.py" answer {directory} N' in run_herdr_instructions, True)
-
-    for label, error, expected in [
-        ("tuios ask times out: normal", "error: timeout: no answer in 60000 ms\n", 0),
-        ("tuios ask on a blocked reviewer: fails", "error: agent_blocked: the agent waits on a prompt\n", 2),
-        ("tuios ask not taken: fails", "error: prompt_stalled: no sign of the question\n", 2),
-        ("tuios ask without a session: fails", '{"error": "ask-agent failed: no sessions exist.", "success": false}\n', 2),
-    ]:
-        reset_fakes(ask_error=error)
-        result = run(["ask", "w1", "/run/x/d1", "2"], tuios_env, stdin=question)
-        check(label, result.returncode, expected)
 
     reset_fakes()
     result = run(["ask", "t99", "/run/x/d1", "2"], herdr_env, stdin="  \n")

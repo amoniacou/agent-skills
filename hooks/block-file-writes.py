@@ -36,6 +36,10 @@ INPLACE = [
     (re.compile(r"(?:^|[|&;(\s])(?:yq|jq|crudini)(?:\s+-\S*)*\s+(?:-i\b|--in-?place\b)"), "yq/jq -i"),
 ]
 
+MAKE_DRY_RUN = re.compile(
+    r"(?:^|[|&;(\s/'\"])g?make(?:\s+[^\s|;&]+)*?\s+(?:-[abdeiBEhkLpqrRsStvw]*n[a-zA-Z]*|--dry-run|--just-print|--recon)(?=[\s|;&)]|$)"
+)
+
 FILE_OPS = re.compile(
     r"(?:^|&&|\|\||[;|(\n])\s*(?:sudo(?:\s+-\S+)*\s+|xargs\b[^|;&\n]*?\s)?"
     r"(mv|cp|rm|rmdir|mkdir|touch|ln|install|rsync|unlink)(?:\s|$)"
@@ -81,6 +85,12 @@ def check_command(command, root):
     for pattern, name in INPLACE:
         if pattern.search(cleaned):
             deny("Blocked: %s edits the file in place. %s" % (name, RULE))
+
+    if MAKE_DRY_RUN.search(cleaned):
+        deny(
+            "Blocked: make -n is not a safe preview. It still runs each recipe line with $(MAKE) "
+            "or a + prefix, so a test target runs the tests. Read the Makefile to see the recipe."
+        )
 
     found = FILE_OPS.search(cleaned) or FILE_OPS.search(unquoted)
     if found:
